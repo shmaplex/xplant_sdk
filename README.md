@@ -40,7 +40,7 @@ Requires **Node.js 18+**. Works in browser environments too (uses the native `fe
 
 ### 1. Get an API key
 
-Go to **xPlant → Settings → Integrations → API Keys** and create a key with the scopes your integration needs.
+Go to **xPlant → [Settings → Integrations → API Keys](https://www.xplantpro.com/settings/integrations)** and create a key with the scopes your integration needs.
 
 Keep your key out of version control — use an environment variable:
 
@@ -70,6 +70,42 @@ await client.devices.heartbeat("your-device-uuid");
 
 // Read plants in your workspace
 const plants = await client.plants.list();
+
+// Queue bench work
+await client.tasks.create({
+  title: "Replate N2001 — second pass",
+  category: "transfer",
+  priority: "high",
+});
+```
+
+The client targets `https://www.xplantpro.com` by default. Pass `baseUrl` only to
+point at a development server.
+
+---
+
+## Response shape
+
+Every `/api/v1` route wraps its payload in an envelope:
+
+```jsonc
+// success
+{ "ok": true, "data": { /* … */ } }
+
+// failure
+{ "ok": false, "data": null, "error": "Task not found", "code": "NOT_FOUND" }
+```
+
+Resource methods unwrap this for you — `client.plants.list()` resolves to a
+`PlantSummary[]`, not to the envelope. A failure envelope is raised as an
+`XPlantError`, never handed back as data.
+
+When you need the envelope itself (for `meta`), use the escape hatch:
+
+```typescript
+const envelope = await client.requestEnvelope<PlantSummary[]>("/api/v1/plants");
+envelope.data; // PlantSummary[]
+envelope.meta; // Record<string, unknown> | undefined
 ```
 
 ---
@@ -82,60 +118,133 @@ const plants = await client.plants.list();
 // Post a reading (write:sensor_readings scope)
 await client.sensorReadings.create({
   device_id: string;
-  type: "temperature" | "humidity" | "co2" | "lux" | "ph" | "ec" | string;
+  type: "temperature" | "humidity" | "ph" | "co2" | "light" | "other";
   value: number;
-  unit: string;        // "C", "%", "ppm", "lux", "pH", "ms/cm", etc.
-  timestamp?: string;  // ISO 8601 — defaults to now
-  location_id?: string;
+  unit: string;          // "C", "%", "ppm", "lux", "pH", "mS/cm" — 1–20 chars
+  recorded_at?: string;  // ISO 8601 — defaults to now
+  room_id?: string;
   notes?: string;
 });
 
-// List recent readings for a device (read:sensor_readings scope)
+// List recent readings, newest first (read:sensor_readings scope)
 const readings = await client.sensorReadings.list("device-uuid");
+const recent = await client.sensorReadings.list({
+  room_id: "room-uuid",
+  type: "temperature",
+  since: "2026-08-01T00:00:00Z",
+  limit: 500,           // defaults to 100, capped at 1000
+});
 ```
 
 ### `client.devices`
 
 ```typescript
-// Heartbeat — confirms device is online (write:device_events scope)
-await client.devices.heartbeat("device-uuid");
+// Heartbeat — confirms device is online (write:devices scope)
+const { received_at } = await client.devices.heartbeat("device-uuid");
 
-// Register a new device
+// Register a new device (write:devices scope)
 await client.devices.register({
   name: "Growth Room 1 — Temp/Humidity",
-  type: "sensor",
+  type: "sensor",          // "sensor" | "controller" | "gateway"
   hardware: "esp32",
 });
 
-// Get device metadata
+// List devices, or fetch one (read:devices scope)
+const devices = await client.devices.list();
 const device = await client.devices.get("device-uuid");
 ```
 
 ### `client.plants`
 
 ```typescript
-// List plants (read:plants scope)
-const plants = await client.plants.list({ limit: 50 });
+// List plants, newest first (read:plants scope)
+const plants = await client.plants.list({ limit: 50, offset: 0 });
 
 // Get a single plant
 const plant = await client.plants.get("plant-uuid");
 ```
 
+Paging is offset-based and returns no total — a page shorter than `limit` is the
+last page. `limit` defaults to 50 and is capped at 200.
+
 ### `client.tasks`
 
 ```typescript
-// List due tasks (read:tasks scope)
-const tasks = await client.tasks.list({ due: "today" });
+// List tasks, soonest due first (read:tasks scope)
+const tasks = await client.tasks.list({ status: "todo", limit: 50 });
+const mine = await client.tasks.list({ assigned_to: userId });
+
+// Get a single task
+const task = await client.tasks.get("task-uuid");
+
+// Create a task (write:tasks scope)
+const created = await client.tasks.create({
+  title: "Replate N2001 — second pass",
+  category: "transfer",        // media_prep | transfer | contamination | subculture
+                               // | sop_review | acclimation | cleaning | monitoring | other
+  priority: "high",            // low | medium | high | urgent
+  workflow_status: "todo",     // backlog | todo | in_progress | waiting_blocked | review | done
+  due_date: "2026-08-10T09:00:00Z",
+  assigned_to: userId,         // must be an active member of the key's workspace
+});
+
+// Update a task (write:tasks scope)
+const result = await client.tasks.update(created.id, { priority_rank: 1500 });
 ```
+
+#### Ordering, and the manual-override rule
+
+`priority` is the label; `priority_rank` is the queue position — lower sorts
+first, and it is fractional, so a scheduler can drop a task between two
+neighbours without renumbering. Send `priority_rank: null` to clear a position
+and let the label decide.
+
+**A write over this API counts as automatic, and an automated write never
+overwrites an order somebody set by hand.** If a task's `priority_source` is
+`manual`, the ordering part of your patch is skipped — the request still
+succeeds with 200 and the rest of the patch still applies.
+
+That skip is reported rather than swallowed, so a nightly sync can tell the
+difference between "applied" and "silently ignored":
+
+```typescript
+const result = await client.tasks.update(taskId, { priority_rank: 1500 });
+
+result.task;           // the task as stored — the order that won, not what you sent
+result.skipped;        // true when the manual-override rule declined the change
+result.priority_write; // { applied, reason, priority_source, message } | null
+
+if (result.skipped) {
+  console.warn(result.priority_write?.message);
+  // → "Left this task where someone put it by hand. Send release: true to
+  //    hand it back to automatic ordering."
+}
+```
+
+To take a hand-ordered task back under automatic control, send `release: true`:
+
+```typescript
+await client.tasks.update(taskId, { priority_rank: 1500, release: true });
+```
+
+`priority_source` is returned on every task and says who owns the order:
+`default` (never positioned), `auto` (set by an integration), or `manual` (set
+by a person). `priority_write` is `null` when the request attempted no ordering
+change.
 
 ### `client.labels`
 
 ```typescript
 // Resolve a QR/barcode scan to an xPlant record (read:labels scope)
 const result = await client.labels.resolve("QR_CODE_STRING");
-// result.entity_type → "plant" | "explant" | "media_batch" | ...
-// result.entity_id   → UUID of the matched record
+// result.record_type   → "plant" | "explant"
+// result.record_id     → UUID of the matched record
+// result.display_name  → human-readable label
+// result.url           → relative in-app path, e.g. "/dashboard/plants/<id>"
 ```
+
+A code that matches nothing in the workspace raises an `XPlantError` with
+status 404.
 
 ---
 
@@ -148,14 +257,28 @@ try {
   await client.sensorReadings.create({ ... });
 } catch (err) {
   if (err instanceof XPlantError) {
-    console.error(`API error ${err.status}:`, err.body);
+    console.error(`API error ${err.status} (${err.code}):`, err.message);
     // err.status === 401 → check your API key
-    // err.status === 403 → key missing required scope
-    // err.status === 429 → rate limit exceeded
+    // err.status === 403 → key missing a scope; err.message names it
+    // err.status === 404 → not found, or outside the key's workspace
+    // err.status === 422 → validation failed; err.message names the field
   }
   throw err;
 }
 ```
+
+`err.code` is stable and safe to branch on — `UNAUTHORIZED`, `FORBIDDEN`,
+`NOT_FOUND`, `VALIDATION_ERROR`, and the `*_FAILED` server codes. It is `null`
+when a gateway answered instead of the app. `err.message` is human-readable and
+may be reworded; `err.body` holds the raw response text.
+
+Two quirks worth coding around: the device and sensor-reading routes return
+`code: "UNAUTHORIZED"` for 403 as well as 401, and a record outside your
+workspace returns 404 rather than 403.
+
+> **Note:** a task ordering change declined by the manual-override rule is a
+> **success, not an error** — nothing throws. Check `result.skipped` on
+> `tasks.update()`.
 
 ---
 
@@ -167,12 +290,33 @@ Full type definitions are included — no `@types/` package needed.
 import type {
   SensorReadingPayload,
   SensorReading,
+  DeviceSummary,
+  DeviceRegisterPayload,
   PlantSummary,
   TaskSummary,
+  TaskCreateInput,
+  TaskUpdateInput,
+  TaskUpdateResult,
+  PriorityWriteReport,
+  PrioritySource,
   LabelResolveResult,
   XPlantApiResponse,
 } from "@shmaplex/xplant-sdk";
 ```
+
+---
+
+## Upgrading to 0.2.0
+
+0.2.0 corrects behaviour that never matched the running API. See
+[CHANGELOG.md](CHANGELOG.md) for the full list. The two changes that touch
+existing code:
+
+- **Resource methods now return records, not the envelope.** Code that reached
+  through `.data` (`(await client.plants.list()).data`) should drop that step.
+  Code that read `plants[0].name` and got `undefined` now works.
+- **The default host moved to `https://www.xplantpro.com`.** Clients that passed
+  an explicit `baseUrl` are unaffected.
 
 ---
 
