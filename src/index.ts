@@ -23,5 +23,10 @@ export type {
   DeviceSummary,
   PlantSummary,
   TaskSummary,
+  TaskPriority,
+  TaskCategory,
+  WorkflowStatus,
+  TaskCreatePayload,
+  TaskUpdatePayload,
   LabelResolveResult,
 } from "./types.js";

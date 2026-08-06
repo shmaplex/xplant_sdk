@@ -99,24 +99,66 @@ export interface DeviceSummary {
 export interface PlantSummary {
   id: string;
   name: string;
-  species?: string;
+  species: string;
   status: string;
-  workspace_id: string;
-  created_at: string;
+  /** `null` for a solo workspace with no team. */
+  workspace_id: string | null;
+  created_at: string | null;
 }
 
 // ---------------------------------------------------------------------------
 // Tasks
 // ---------------------------------------------------------------------------
 
+export type TaskPriority = "low" | "medium" | "high" | "urgent";
+
+export type TaskCategory =
+  | "media_prep"
+  | "transfer"
+  | "contamination"
+  | "subculture"
+  | "sop_review"
+  | "acclimation"
+  | "cleaning"
+  | "monitoring"
+  | "other";
+
+export type WorkflowStatus =
+  | "backlog"
+  | "todo"
+  | "in_progress"
+  | "waiting_blocked"
+  | "review"
+  | "done";
+
 export interface TaskSummary {
   id: string;
   title: string;
   status: string;
-  due_date?: string | null;
-  assigned_to?: string | null;
-  created_at: string;
+  due_date: string | null;
+  assigned_to: string | null;
+  priority: TaskPriority | null;
+  category: TaskCategory | null;
+  created_at: string | null;
 }
+
+/** Payload for `client.tasks.create()`. Requires the `write:tasks` scope. */
+export interface TaskCreatePayload {
+  title: string;
+  /** ISO 8601 with a UTC offset. Defaults to now if omitted. */
+  due_date?: string;
+  /** Defaults to `"media_prep"` if omitted. */
+  category?: TaskCategory;
+  notes?: string;
+  priority?: TaskPriority;
+  /** Defaults to `"todo"` if omitted. */
+  workflow_status?: WorkflowStatus;
+  /** Must be an active member of the key's workspace, or the request is rejected with 422. */
+  assigned_to?: string;
+}
+
+/** Payload for `client.tasks.update()`. Only supplied fields change; at least one is required. */
+export type TaskUpdatePayload = Partial<TaskCreatePayload>;
 
 // ---------------------------------------------------------------------------
 // Labels
@@ -124,8 +166,9 @@ export interface TaskSummary {
 
 export interface LabelResolveResult {
   barcode: string;
-  record_type: "plant" | "batch" | "explant" | "container" | string;
+  record_type: "plant" | "explant";
   record_id: string;
   display_name: string;
+  /** In-app path to the resolved record (relative, e.g. `/dashboard/plants/{id}`). */
   url: string;
 }

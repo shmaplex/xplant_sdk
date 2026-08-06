@@ -6,7 +6,7 @@ export class PlantsResource {
 
   /**
    * List plant summaries for the workspace.
-   * Requires the `plants:read` scope.
+   * Requires the `read:plants` scope.
    */
   list(): Promise<PlantSummary[]> {
     return this.request<PlantSummary[]>("/api/v1/plants");
@@ -14,7 +14,7 @@ export class PlantsResource {
 
   /**
    * Get a single plant by ID.
-   * Requires the `plants:read` scope.
+   * Requires the `read:plants` scope.
    */
   get(plantId: string): Promise<PlantSummary> {
     return this.request<PlantSummary>(

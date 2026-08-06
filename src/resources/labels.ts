@@ -7,12 +7,12 @@ export class LabelsResource {
   /**
    * Resolve a barcode or QR code string to its linked xPlant record.
    * Useful for scan stations that need to look up what a label refers to.
-   * Requires the `labels:read` scope.
+   * Requires the `read:labels` scope.
    *
    * @example
    * const result = await client.labels.resolve("XPL-2025-001");
-   * // result.record_type === "batch"
-   * // result.url === "https://xplant.shmaplex.com/batches/..."
+   * // result.record_type === "plant" | "explant"
+   * // result.url === "/dashboard/plants/..." (in-app path, relative)
    */
   resolve(barcode: string): Promise<LabelResolveResult> {
     return this.request<LabelResolveResult>(

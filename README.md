@@ -2,7 +2,7 @@
   <img src=".github/github-header.png" alt="xplant_sdk" width="full"/>
 </p>
 <p align="center">
-Official JavaScript/TypeScript SDK for the [xPlant](https://xplantpro.com) external API.
+Official JavaScript/TypeScript SDK for the [xPlant](https://www.xplantpro.com) external API.
 </p>
 
 ---
@@ -81,13 +81,11 @@ const plants = await client.plants.list();
 ```typescript
 // Post a reading (write:sensor_readings scope)
 await client.sensorReadings.create({
-  device_id: string;
-  type: "temperature" | "humidity" | "co2" | "lux" | "ph" | "ec" | string;
-  value: number;
-  unit: string;        // "C", "%", "ppm", "lux", "pH", "ms/cm", etc.
-  timestamp?: string;  // ISO 8601 — defaults to now
-  location_id?: string;
-  notes?: string;
+  device_id: "device-uuid",
+  type: "temperature", // "temperature" | "humidity" | "co2" | "light_lux" | "ph" | "ec"
+  value: 24.5,
+  unit: "C", // "C" | "F" | "%" | "ppm" | "lux" | "pH" | "mS/cm"
+  timestamp: "2026-08-06T12:00:00Z", // ISO 8601 — defaults to now if omitted
 });
 
 // List recent readings for a device (read:sensor_readings scope)
@@ -97,25 +95,23 @@ const readings = await client.sensorReadings.list("device-uuid");
 ### `client.devices`
 
 ```typescript
-// Heartbeat — confirms device is online (write:device_events scope)
+// Heartbeat — confirms device is online (write:devices scope)
 await client.devices.heartbeat("device-uuid");
 
-// Register a new device
-await client.devices.register({
-  name: "Growth Room 1 — Temp/Humidity",
-  type: "sensor",
-  hardware: "esp32",
-});
-
-// Get device metadata
+// Get device metadata (read:devices scope)
 const device = await client.devices.get("device-uuid");
 ```
+
+> Device *registration* (`POST /api/v1/devices`) exists server-side but has no
+> `DevicesResource` wrapper yet in this SDK version — call it directly with
+> `client.request("/api/v1/devices", { method: "POST", body: JSON.stringify({ ... }) })`
+> in the meantime.
 
 ### `client.plants`
 
 ```typescript
-// List plants (read:plants scope)
-const plants = await client.plants.list({ limit: 50 });
+// List plants for the workspace (read:plants scope)
+const plants = await client.plants.list();
 
 // Get a single plant
 const plant = await client.plants.get("plant-uuid");
@@ -124,8 +120,19 @@ const plant = await client.plants.get("plant-uuid");
 ### `client.tasks`
 
 ```typescript
-// List due tasks (read:tasks scope)
-const tasks = await client.tasks.list({ due: "today" });
+// List tasks for the workspace (read:tasks scope)
+const tasks = await client.tasks.list();
+
+// Create a task — priority and assigned_to route work from your own data (write:tasks scope)
+const task = await client.tasks.create({
+  title: "Replate N2001",
+  category: "transfer",
+  priority: "urgent",
+  assigned_to: "teammate-uuid",
+});
+
+// Update a task — only supplied fields change (write:tasks scope)
+await client.tasks.update(task.id, { priority: "high" });
 ```
 
 ### `client.labels`
@@ -133,8 +140,9 @@ const tasks = await client.tasks.list({ due: "today" });
 ```typescript
 // Resolve a QR/barcode scan to an xPlant record (read:labels scope)
 const result = await client.labels.resolve("QR_CODE_STRING");
-// result.entity_type → "plant" | "explant" | "media_batch" | ...
-// result.entity_id   → UUID of the matched record
+// result.record_type → "plant" | "explant"
+// result.record_id   → UUID of the matched record
+// result.url         → in-app path, e.g. "/dashboard/plants/{id}"
 ```
 
 ---
@@ -148,14 +156,17 @@ try {
   await client.sensorReadings.create({ ... });
 } catch (err) {
   if (err instanceof XPlantError) {
-    console.error(`API error ${err.status}:`, err.body);
-    // err.status === 401 → check your API key
-    // err.status === 403 → key missing required scope
-    // err.status === 429 → rate limit exceeded
+    console.error(`API error ${err.status} (${err.code}):`, err.body);
+    // err.status === 401, err.code === "UNAUTHORIZED" → missing, malformed, or revoked key
+    // err.status === 403, err.code === "FORBIDDEN"    → key missing the required scope
+    // err.status === 404, err.code === "NOT_FOUND"    → record doesn't exist, or belongs to another workspace
+    // err.status === 422, err.code === "VALIDATION_ERROR" → body failed validation; err.body names the field
   }
   throw err;
 }
 ```
+
+`err.code` is the stable, machine-readable code from the API's response envelope — prefer it over `err.status` alone when branching on a specific failure, since `err.body` is a human-readable message that may be reworded between releases.
 
 ---
 
@@ -169,6 +180,11 @@ import type {
   SensorReading,
   PlantSummary,
   TaskSummary,
+  TaskCreatePayload,
+  TaskUpdatePayload,
+  TaskPriority,
+  TaskCategory,
+  WorkflowStatus,
   LabelResolveResult,
   XPlantApiResponse,
 } from "@shmaplex/xplant-sdk";
