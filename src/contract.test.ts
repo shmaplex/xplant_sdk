@@ -105,6 +105,62 @@ const INVOCATIONS: Array<{
     expect: "GET /api/v1/labels/resolve",
     call: (c) => c.labels.resolve("XP-0001"),
   },
+  {
+    name: "devices.recordEvent",
+    expect: "POST /api/v1/device-events",
+    call: (c) =>
+      c.devices.recordEvent({ device_id: "d1", event_type: "alert" }),
+  },
+  {
+    name: "events.list",
+    expect: "GET /api/v1/events",
+    call: (c) => c.events.list({ entity: "plant" }),
+  },
+  {
+    name: "explants.list",
+    expect: "GET /api/v1/explants",
+    call: (c) => c.explants.list({ limit: 10 }),
+  },
+  {
+    name: "explants.get",
+    expect: "GET /api/v1/explants/{id}",
+    call: (c) => c.explants.get("e1"),
+  },
+  {
+    name: "stages.list",
+    expect: "GET /api/v1/stages",
+    call: (c) => c.stages.list({ explant_id: "e1" }),
+  },
+  {
+    name: "stages.advance",
+    expect: "POST /api/v1/stages",
+    call: (c) => c.stages.advance({ explant_id: "e1", stage: "rooting" }),
+  },
+  {
+    name: "transfers.list",
+    expect: "GET /api/v1/transfers",
+    call: (c) => c.transfers.list({ explant_id: "e1" }),
+  },
+  {
+    name: "transfers.create",
+    expect: "POST /api/v1/transfers",
+    call: (c) => c.transfers.create({ explant_id: "e1" }),
+  },
+  {
+    name: "taskDemand.list",
+    expect: "GET /api/v1/tasks/demand",
+    call: (c) => c.taskDemand.list({ genus: "Phalaenopsis" }),
+  },
+  {
+    name: "taskDemand.record",
+    expect: "POST /api/v1/tasks/demand",
+    call: (c) =>
+      c.taskDemand.record({
+        genus: "Phalaenopsis",
+        demand_score: 10,
+        source: "test",
+      }),
+  },
 ];
 
 describe("every SDK method reaches a route that exists", () => {
@@ -138,6 +194,11 @@ describe("every SDK method reaches a route that exists", () => {
       devices: c.devices,
       sensorReadings: c.sensorReadings,
       labels: c.labels,
+      events: c.events,
+      explants: c.explants,
+      stages: c.stages,
+      transfers: c.transfers,
+      taskDemand: c.taskDemand,
     };
 
     const exposed = Object.entries(resources).flatMap(([name, resource]) =>
@@ -214,6 +275,44 @@ describe("the vendored surface matches what the SDK was built for", () => {
     const keys = new Set(V1_ENDPOINTS.map((e) => `${e.method} ${e.path}`));
     for (const invocation of INVOCATIONS) {
       expect(keys).toContain(invocation.expect);
+    }
+  });
+});
+
+/**
+ * The describe block above proves every SDK method reaches a route that's
+ * really there. It cannot prove the opposite: a route with no SDK method is
+ * invisible to it by construction, which is exactly how issue #4 happened —
+ * nine endpoints (plus a tenth, `device-events`, whose request/response types
+ * already existed in `types.ts` with nothing ever wired up to call them)
+ * drifted onto the API with zero coverage, unnoticed for as long as nobody
+ * happened to compare the two lists by hand.
+ *
+ * This block is that comparison, made permanent. KNOWN_UNCOVERED is an
+ * explicit allowlist, not a blanket escape hatch: a failing build here is
+ * cheap to fix two ways — implement the method, or (only when its shape is
+ * genuinely ambiguous — see resource files and the PR for exact reasoning)
+ * name it here with why. Either way the drift stays visible instead of
+ * sitting unnoticed until the next manual audit. Currently empty: every
+ * endpoint the canonical surface lists has an SDK method.
+ */
+describe("every route in the vendored surface is reachable by some SDK method", () => {
+  const KNOWN_UNCOVERED: string[] = [];
+
+  it("covers every endpoint except an explicit, explained allowlist", () => {
+    const implemented = new Set(INVOCATIONS.map((i) => i.expect));
+    const uncovered = V1_ENDPOINTS.map((e) => `${e.method} ${e.path}`).filter(
+      (key) => !implemented.has(key),
+    );
+    expect(uncovered.sort()).toEqual([...KNOWN_UNCOVERED].sort());
+  });
+
+  it("never allowlists an endpoint the SDK already implements", () => {
+    // Otherwise a stale entry could mask a real future gap by making an
+    // already-fixed endpoint look pre-approved to skip.
+    const implemented = new Set(INVOCATIONS.map((i) => i.expect));
+    for (const key of KNOWN_UNCOVERED) {
+      expect(implemented.has(key)).toBe(false);
     }
   });
 });

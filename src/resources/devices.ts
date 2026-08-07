@@ -1,6 +1,8 @@
 import type { EnvelopeRequestFn } from "../client.js";
 import { XPlantError } from "../client.js";
 import type {
+  DeviceEvent,
+  DeviceEventPayload,
   DeviceHeartbeatPayload,
   DeviceRegisterPayload,
   DeviceSummary,
@@ -66,5 +68,24 @@ export class DevicesResource {
       throw new XPlantError(404, "", "NOT_FOUND", "Device not found in this workspace");
     }
     return device;
+  }
+
+  /**
+   * Record a device event (an alert, a firmware update, a config change, etc.).
+   * Requires the `write:device_events` scope.
+   *
+   * @example
+   * await client.devices.recordEvent({
+   *   device_id: "uuid",
+   *   event_type: "alert",
+   *   payload: { message: "Sensor offline" },
+   * });
+   */
+  async recordEvent(payload: DeviceEventPayload): Promise<DeviceEvent> {
+    const { data } = await this.request<DeviceEvent>("/api/v1/device-events", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return data;
   }
 }

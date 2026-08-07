@@ -3,6 +3,11 @@ import { DevicesResource } from "./resources/devices.js";
 import { PlantsResource } from "./resources/plants.js";
 import { TasksResource } from "./resources/tasks.js";
 import { LabelsResource } from "./resources/labels.js";
+import { EventsResource } from "./resources/events.js";
+import { ExplantsResource } from "./resources/explants.js";
+import { StagesResource } from "./resources/stages.js";
+import { TransfersResource } from "./resources/transfers.js";
+import { TaskDemandResource } from "./resources/task-demand.js";
 import type { XPlantApiResponse } from "./types.js";
 
 /** Production API host. Override with `baseUrl` only to point at a dev server. */
@@ -184,5 +189,30 @@ export class XPlantClient {
   /** Resolve QR/barcode label codes to xPlant records — requires the `read:labels` scope */
   get labels(): LabelsResource {
     return new LabelsResource(this.requestEnvelope.bind(this));
+  }
+
+  /** Read change-history events for plants and explants — requires the `read:events` scope */
+  get events(): EventsResource {
+    return new EventsResource(this.requestEnvelope.bind(this));
+  }
+
+  /** Read explant (batch) summaries — requires the `read:explants` scope */
+  get explants(): ExplantsResource {
+    return new ExplantsResource(this.requestEnvelope.bind(this));
+  }
+
+  /** Read and advance tissue-culture stages — requires `read:transfers` / `write:transfers` scopes */
+  get stages(): StagesResource {
+    return new StagesResource(this.requestEnvelope.bind(this));
+  }
+
+  /** Read and record transfers — requires `read:transfers` / `write:transfers` scopes */
+  get transfers(): TransfersResource {
+    return new TransfersResource(this.requestEnvelope.bind(this));
+  }
+
+  /** Read and push demand signals — requires `read:tasks` / `write:demand` scopes */
+  get taskDemand(): TaskDemandResource {
+    return new TaskDemandResource(this.requestEnvelope.bind(this));
   }
 }

@@ -42,6 +42,17 @@ function escapeLiteral(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Count of `{param}` segments in a manifest path. A literal path like
+ * `/api/v1/tasks/demand` also satisfies the wildcard regex for
+ * `/api/v1/tasks/{id}`, so on a tie the manifest's declaration order would
+ * otherwise decide — exactly backwards from Next.js, which always routes a
+ * static segment to its own file ahead of a dynamic sibling.
+ */
+function specificity(path: string): number {
+  return path.split("/").filter((seg) => seg.startsWith("{")).length;
+}
+
 const MATCHERS = V1_ENDPOINTS.map((endpoint) => ({
   ...endpoint,
   matcher: toMatcher(endpoint.path),
@@ -127,7 +138,15 @@ export function fakeXPlant(options: FakeXPlantOptions = {}): FakeXPlant {
     }
 
     const samePath = MATCHERS.filter((m) => m.matcher.test(url.pathname));
-    const matched = samePath.find((m) => m.method === method) ?? null;
+    // The most specific (fewest wildcard segments) match for this method wins,
+    // the same way a static route file outranks a dynamic one in Next.js.
+    const sameMethod = samePath.filter((m) => m.method === method);
+    const matched =
+      sameMethod.length === 0
+        ? null
+        : sameMethod.reduce((best, candidate) =>
+            specificity(candidate.path) < specificity(best.path) ? candidate : best,
+          );
 
     calls.push({
       method,

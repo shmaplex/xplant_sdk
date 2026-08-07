@@ -46,6 +46,30 @@
       "guard": "inline"
     },
     {
+      "path": "/api/v1/events",
+      "method": "GET",
+      "scopes": [
+        "read:events"
+      ],
+      "guard": "authorizeV1"
+    },
+    {
+      "path": "/api/v1/explants",
+      "method": "GET",
+      "scopes": [
+        "read:explants"
+      ],
+      "guard": "authorizeV1"
+    },
+    {
+      "path": "/api/v1/explants/{id}",
+      "method": "GET",
+      "scopes": [
+        "read:explants"
+      ],
+      "guard": "authorizeV1"
+    },
+    {
       "path": "/api/v1/labels/resolve",
       "method": "GET",
       "scopes": [
@@ -86,6 +110,22 @@
       "guard": "inline"
     },
     {
+      "path": "/api/v1/stages",
+      "method": "GET",
+      "scopes": [
+        "read:transfers"
+      ],
+      "guard": "authorizeV1"
+    },
+    {
+      "path": "/api/v1/stages",
+      "method": "POST",
+      "scopes": [
+        "write:transfers"
+      ],
+      "guard": "authorizeV1"
+    },
+    {
       "path": "/api/v1/tasks",
       "method": "GET",
       "scopes": [
@@ -114,6 +154,38 @@
       "method": "PATCH",
       "scopes": [
         "write:tasks"
+      ],
+      "guard": "authorizeV1"
+    },
+    {
+      "path": "/api/v1/tasks/demand",
+      "method": "GET",
+      "scopes": [
+        "read:tasks"
+      ],
+      "guard": "authorizeV1"
+    },
+    {
+      "path": "/api/v1/tasks/demand",
+      "method": "POST",
+      "scopes": [
+        "write:demand"
+      ],
+      "guard": "authorizeV1"
+    },
+    {
+      "path": "/api/v1/transfers",
+      "method": "GET",
+      "scopes": [
+        "read:transfers"
+      ],
+      "guard": "authorizeV1"
+    },
+    {
+      "path": "/api/v1/transfers",
+      "method": "POST",
+      "scopes": [
+        "write:transfers"
       ],
       "guard": "authorizeV1"
     }

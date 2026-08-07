@@ -9,6 +9,11 @@ export { DevicesResource } from "./resources/devices.js";
 export { PlantsResource } from "./resources/plants.js";
 export { TasksResource } from "./resources/tasks.js";
 export { LabelsResource } from "./resources/labels.js";
+export { EventsResource } from "./resources/events.js";
+export { ExplantsResource } from "./resources/explants.js";
+export { StagesResource } from "./resources/stages.js";
+export { TransfersResource } from "./resources/transfers.js";
+export { TaskDemandResource } from "./resources/task-demand.js";
 
 export type {
   XPlantApiResponse,
@@ -38,4 +43,18 @@ export type {
   PriorityWriteReport,
   TaskUpdateResult,
   LabelResolveResult,
+  EntityType,
+  ExplantListParams,
+  ExplantSummary,
+  EventListParams,
+  EventSummary,
+  StageListParams,
+  StageAdvanceInput,
+  StageSummary,
+  TransferListParams,
+  TransferCreateInput,
+  TransferSummary,
+  TaskDemandListParams,
+  TaskDemandCreateInput,
+  DemandSignalSummary,
 } from "./types.js";

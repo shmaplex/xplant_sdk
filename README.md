@@ -16,6 +16,12 @@ Connect sensors, Raspberry Pis, Arduino devices, scripts, and external tools to 
 > It will be re-published as `@xplant/sdk` once the `@xplant` npm org is available.
 > A deprecation notice and migration guide will be added at that time — no API changes required.
 
+> **This repository is the canonical source for the `@shmaplex/xplant-sdk` npm
+> package.** `shmaplex/xplant_os` (`packages/js-sdk`) is a separate, older copy
+> that must never be published under the `@shmaplex/xplant-sdk` name — the two
+> diverged and npm briefly served the stale one (see [#4](https://github.com/shmaplex/xplant-sdk/issues/4)).
+> Publishes to that name happen from this repository's `main` branch only.
+
 ---
 
 ## Installation
@@ -152,6 +158,14 @@ await client.devices.register({
 // List devices, or fetch one (read:devices scope)
 const devices = await client.devices.list();
 const device = await client.devices.get("device-uuid");
+
+// Record a device event — alert, firmware update, config change, etc.
+// (write:device_events scope)
+await client.devices.recordEvent({
+  device_id: "device-uuid",
+  event_type: "alert",     // heartbeat | alert | firmware_update | config_change | error | other
+  payload: { message: "Sensor offline" },
+});
 ```
 
 ### `client.plants`
@@ -246,6 +260,84 @@ const result = await client.labels.resolve("QR_CODE_STRING");
 A code that matches nothing in the workspace raises an `XPlantError` with
 status 404.
 
+### `client.explants`
+
+```typescript
+// List explants (batches), newest first (read:explants scope)
+const explants = await client.explants.list({ limit: 50 });
+
+// Resolve the customer's own batch identifier (e.g. "N2001") to its record
+const [batch] = await client.explants.list({ externalId: "N2001" });
+
+// Get a single explant
+const explant = await client.explants.get("explant-uuid");
+```
+
+### `client.events`
+
+```typescript
+// Change history for a plant or explant lineage, oldest first
+// (read:events scope). `entity` is required.
+const events = await client.events.list({ entity: "explant" });
+
+// Pull only what's new since your last sync
+const delta = await client.events.list({
+  entity: "explant",
+  since: lastEventCreatedAt,
+});
+```
+
+### `client.stages`
+
+```typescript
+// Stage history for a plant or explant, most recent first
+// (read:transfers scope) — pass exactly one of plant_id / explant_id
+const history = await client.stages.list({ explant_id: "explant-uuid" });
+
+// Advance to a new tissue-culture stage (write:transfers scope)
+const stage = await client.stages.advance({
+  explant_id: "explant-uuid",
+  stage: "rooting",
+  room_id: "room-uuid",
+});
+```
+
+### `client.transfers`
+
+```typescript
+// Transfer history for a plant or explant, most recent first
+// (read:transfers scope) — pass exactly one of plant_id / explant_id
+const transfers = await client.transfers.list({ explant_id: "explant-uuid" });
+
+// Record a transfer — subculture to fresh media (write:transfers scope)
+// transfer_cycle auto-increments from the entity's last transfer unless supplied.
+await client.transfers.create({
+  explant_id: "explant-uuid",
+  to_location: "Shelf 3",
+});
+```
+
+### `client.taskDemand`
+
+```typescript
+// Recent demand signals, newest first (read:tasks scope)
+const signals = await client.taskDemand.list({ genus: "Phalaenopsis" });
+
+// Just the latest reading for a genus
+const [current] = await client.taskDemand.list({
+  genus: "Phalaenopsis",
+  current: true,
+});
+
+// Push a demand number (write:demand scope — separate from write:tasks so a
+// demand-only integration doesn't also get task write access)
+await client.taskDemand.record({
+  genus: "Phalaenopsis",
+  demand_score: 42,
+  source: "shop-orders",
+});
+```
+
 ---
 
 ## Error handling
@@ -292,6 +384,8 @@ import type {
   SensorReading,
   DeviceSummary,
   DeviceRegisterPayload,
+  DeviceEventPayload,
+  DeviceEvent,
   PlantSummary,
   TaskSummary,
   TaskCreateInput,
@@ -300,9 +394,29 @@ import type {
   PriorityWriteReport,
   PrioritySource,
   LabelResolveResult,
+  ExplantSummary,
+  ExplantListParams,
+  EventSummary,
+  EventListParams,
+  StageSummary,
+  StageAdvanceInput,
+  TransferSummary,
+  TransferCreateInput,
+  DemandSignalSummary,
+  TaskDemandCreateInput,
   XPlantApiResponse,
 } from "@shmaplex/xplant-sdk";
 ```
+
+---
+
+## Upgrading to 0.3.0
+
+0.3.0 is additive — no breaking changes. It adds five resources
+(`client.events`, `client.explants`, `client.stages`, `client.transfers`,
+`client.taskDemand`) and `client.devices.recordEvent()`, closing the gap
+between the vendored API surface and what the SDK implemented. See
+[CHANGELOG.md](CHANGELOG.md).
 
 ---
 

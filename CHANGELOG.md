@@ -13,6 +13,37 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-07
+
+Closes the contract-coverage gap from [#4](https://github.com/shmaplex/xplant-sdk/issues/4):
+the vendored API surface listed 22 endpoints, the SDK implemented 12. Every
+change below is additive — no breaking changes.
+
+### Added
+- `client.events` — `list()`, change history for a plant or explant lineage.
+- `client.explants` — `list()`, `get()`, batch summaries and external-id lookup.
+- `client.stages` — `list()`, `advance()`, tissue-culture stage history and writes.
+- `client.transfers` — `list()`, `create()`, transfer history and writes.
+- `client.taskDemand` — `list()`, `record()`, demand-signal history and pushes.
+- `client.devices.recordEvent()` — the `DeviceEvent`/`DeviceEventPayload` types
+  shipped in 0.2.0 with no method wired up to use them; this was the same class
+  of gap as the other nine, just not one the audit in #4 had counted.
+
+### Changed
+- `src/testing/v1-surface.json` refreshed from the canonical copy (13 → 22
+  endpoints).
+- `contract.test.ts` now checks coverage in both directions. It already proved
+  every SDK method reaches a real route; it now also proves every vendored
+  endpoint has an SDK method, via an explicit (currently empty) allowlist for
+  any future gap that turns out to be genuinely ambiguous rather than simply
+  unimplemented.
+- Fixed a route-matching precedence bug in the `fake-xplant.ts` test double:
+  a literal path (`/api/v1/tasks/demand`) could be shadowed by a parameterized
+  sibling (`/api/v1/tasks/{id}`) that also matched the URL, because the fake
+  picked the first manifest entry that matched rather than the most specific
+  one. Real Next.js routing always prefers the static file; the fake now does
+  too.
+
 ## [0.2.0] — 2026-08-06
 
 Corrective release. Every change below fixes behaviour that never matched the

@@ -327,3 +327,171 @@ export interface LabelResolveResult {
   /** Relative in-app path, e.g. `/dashboard/plants/<id>`. */
   url: string;
 }
+
+// ---------------------------------------------------------------------------
+// Explants
+// ---------------------------------------------------------------------------
+
+/** Filters accepted by `explants.list()`. */
+export interface ExplantListParams extends PageParams {
+  /**
+   * Resolve the customer's own batch identifier (e.g. "N2001") to the record
+   * it was imported under, via the same lookup `labels.resolve()` uses. At
+   * most one row comes back, but the response is still an array.
+   */
+  externalId?: string;
+}
+
+export interface ExplantSummary {
+  id: string;
+  label: string | null;
+  /**
+   * The customer's own batch identifier, verbatim as supplied at import.
+   * `null` when the record has none.
+   */
+  external_id: string | null;
+  status: string;
+  plant_id: string | null;
+  workspace_id: string | null;
+  initial_count: number | null;
+  current_count: number | null;
+  created_at: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Events (plant/explant change history)
+// ---------------------------------------------------------------------------
+
+export type EntityType = "plant" | "explant";
+
+/** Filters accepted by `events.list()`. `entity` is required. */
+export interface EventListParams extends PageParams {
+  entity: EntityType;
+  /** ISO 8601 — only events created after this instant. */
+  since?: string;
+}
+
+export interface EventSummary {
+  id: string;
+  entity_type: EntityType;
+  entity_id: string;
+  stage_id: string | null;
+  event_type: string;
+  event_time: string;
+  recorded_by: string | null;
+  payload: unknown;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Stages
+// ---------------------------------------------------------------------------
+
+/** Filters accepted by `stages.list()`. Provide exactly one of the two ids. */
+export interface StageListParams extends PageParams {
+  plant_id?: string;
+  explant_id?: string;
+}
+
+/** Payload sent when advancing a plant or explant to a new stage. */
+export interface StageAdvanceInput {
+  plant_id?: string;
+  explant_id?: string;
+  /** 1–50 characters. */
+  stage: string;
+  /** Plain date or ISO timestamp. Defaults to today if omitted. */
+  entered_on?: string;
+  room_id?: string;
+  /** Up to 5000 characters. */
+  notes?: string;
+}
+
+export interface StageSummary {
+  id: string;
+  entity_type: EntityType;
+  entity_id: string;
+  stage: string;
+  status: string;
+  entered_on: string | null;
+  completed_at: string | null;
+  room_id: string | null;
+  notes: string | null;
+  created_at: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Transfers
+// ---------------------------------------------------------------------------
+
+/** Filters accepted by `transfers.list()`. Provide exactly one of the two ids. */
+export interface TransferListParams extends PageParams {
+  plant_id?: string;
+  explant_id?: string;
+}
+
+/** Payload sent when recording a transfer. */
+export interface TransferCreateInput {
+  plant_id?: string;
+  explant_id?: string;
+  /** Plain date or ISO timestamp. Defaults to today if omitted. */
+  transfer_date?: string;
+  /** Up to 200 characters. */
+  from_location?: string;
+  /** Up to 200 characters. */
+  to_location?: string;
+  /** Auto-increments from the entity's last transfer when omitted. */
+  transfer_cycle?: number;
+  /** Up to 5000 characters. */
+  notes?: string;
+}
+
+export interface TransferSummary {
+  id: string;
+  entity_type: EntityType;
+  entity_id: string;
+  transfer_date: string | null;
+  transfer_cycle: number | null;
+  from_location: string | null;
+  to_location: string | null;
+  status: string;
+  notes: string | null;
+  created_at: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Task demand signals
+// ---------------------------------------------------------------------------
+
+/** Filters accepted by `taskDemand.list()`. */
+export interface TaskDemandListParams extends PageParams {
+  /** Narrow to one genus. */
+  genus?: string;
+  /**
+   * When `true` together with `genus`, return only the latest reading for
+   * that genus (as a single-item array) instead of the recent history.
+   */
+  current?: boolean;
+}
+
+/** Payload sent when pushing a demand signal. */
+export interface TaskDemandCreateInput {
+  /** 1–100 characters. */
+  genus: string;
+  /** Up to 50 characters, e.g. "seed" or "tissue". */
+  source_type?: string;
+  demand_score: number;
+  /** 1–100 characters, e.g. the name of the pushing system. */
+  source: string;
+  /** ISO 8601 with offset. Defaults to now. */
+  observed_at?: string;
+}
+
+export interface DemandSignalSummary {
+  id: string;
+  genus: string;
+  source_type: string | null;
+  demand_score: number;
+  source: string;
+  observed_at: string;
+  created_at: string;
+}
