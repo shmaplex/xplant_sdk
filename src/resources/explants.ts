@@ -1,7 +1,14 @@
 import type { EnvelopeRequestFn } from "../client.js";
 import { ListPromise } from "../list.js";
 import { toQuery } from "../query.js";
-import type { ExplantListParams, ExplantSummary, RequestOptions } from "../types.js";
+import type {
+  ExplantCreateInput,
+  ExplantListParams,
+  ExplantSummary,
+  ExplantUpdateInput,
+  RequestOptions,
+  WriteOptions,
+} from "../types.js";
 
 export class ExplantsResource {
   constructor(private request: EnvelopeRequestFn) {}
@@ -55,6 +62,53 @@ export class ExplantsResource {
     const { data } = await this.request<ExplantSummary>(
       `/api/v1/explants/${encodeURIComponent(explantId)}`,
       {},
+      options,
+    );
+    return data;
+  }
+
+  /**
+   * Create an explant (batch).
+   * Requires the `write:explants` scope.
+   *
+   * Safe to retry with an `Idempotency-Key`. An `external_id` already in use
+   * answers `409 DUPLICATE_ENTRY`; a workspace at its plan's limit answers
+   * `402 PLAN_LIMIT_REACHED`.
+   *
+   * @example
+   * const batch = await client.explants.create({
+   *   label: "B-2026-114",
+   *   plant_id: plantId,
+   *   external_id: "B-2026-114",
+   * });
+   */
+  async create(input: ExplantCreateInput, options?: WriteOptions): Promise<ExplantSummary> {
+    const { data } = await this.request<ExplantSummary>(
+      "/api/v1/explants",
+      { method: "POST", body: JSON.stringify(input) },
+      { ...options, idempotent: true },
+    );
+    return data;
+  }
+
+  /**
+   * Update an explant. Only the fields you send change.
+   * Requires the `write:explants` scope.
+   *
+   * A teammate's explant needs its creator or a manager, or answers
+   * `403 EXPLANT_WRITE_FORBIDDEN`.
+   *
+   * @example
+   * await client.explants.update(explantId, { status: "needs_subculture" });
+   */
+  async update(
+    explantId: string,
+    input: ExplantUpdateInput,
+    options?: WriteOptions,
+  ): Promise<ExplantSummary> {
+    const { data } = await this.request<ExplantSummary>(
+      `/api/v1/explants/${encodeURIComponent(explantId)}`,
+      { method: "PATCH", body: JSON.stringify(input) },
       options,
     );
     return data;

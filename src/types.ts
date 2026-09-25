@@ -123,6 +123,30 @@ export interface PageParams {
 }
 
 // ---------------------------------------------------------------------------
+// Shared value types
+// ---------------------------------------------------------------------------
+
+/**
+ * An exact amount of money. `amount` is a decimal written as text, e.g.
+ * `"1250.00"` — never a floating-point number, so parse it with a decimal type
+ * rather than `Number()` when the value matters.
+ */
+export interface Money {
+  amount: string;
+  /** ISO 4217 code, e.g. `"USD"`. */
+  currency: string | null;
+}
+
+/**
+ * The lab's own fields on a record, keyed by each field's key as set up in the
+ * lab's settings. Values are text, numbers, booleans, or dates written as
+ * `YYYY-MM-DD`; a blank field is absent or `null`. Empty when the lab has set
+ * up no fields. Writing a value the field does not accept answers
+ * `422 VALIDATION_ERROR` with a `custom_fields:` message.
+ */
+export type CustomFieldValues = Record<string, string | number | boolean | null>;
+
+// ---------------------------------------------------------------------------
 // Identity — `me` and `workspaces`
 // ---------------------------------------------------------------------------
 
@@ -197,6 +221,64 @@ export interface PlantSummary {
    * one.
    */
   external_id: string | null;
+  /** The lab's own fields. See {@link CustomFieldValues}. */
+  custom_fields: CustomFieldValues;
+}
+
+export type PlantStatus =
+  | "active"
+  | "dormant"
+  | "harvested"
+  | "contaminated"
+  | "failed"
+  | "in_culture"
+  | "ready_for_transfer"
+  | "quarantined"
+  | "archived";
+
+/** The stage a new plant starts in. */
+export type PlantStage =
+  | "Mother Block"
+  | "Acclimation"
+  | "Production"
+  | "Cold Storage"
+  | "Quarantine"
+  | "Propagation"
+  | "Hardening Off"
+  | "Greenhouse"
+  | "Field"
+  | "Discarded";
+
+/** Payload sent when creating a plant. */
+export interface PlantCreateInput {
+  /** 1–200 characters. */
+  species: string;
+  common_name?: string | null;
+  genus?: string | null;
+  family?: string | null;
+  cultivar?: string | null;
+  source?: string | null;
+  /** Up to 5000 characters. */
+  notes?: string | null;
+  status?: PlantStatus;
+  /** The stage the plant starts in. */
+  initial_stage?: PlantStage;
+  /** Your own identifier, 1–100 characters. One already in use answers `409 DUPLICATE_ENTRY`. */
+  external_id?: string | null;
+  custom_fields?: CustomFieldValues;
+}
+
+/** Payload sent when updating a plant. Only the fields you send change. */
+export type PlantUpdateInput = Partial<Omit<PlantCreateInput, "initial_stage">>;
+
+/** Result of `plants.create()`. */
+export interface PlantCreateResult {
+  plant: PlantSummary;
+  /**
+   * Set only when the plant was saved but its first stage could not be. Record
+   * one with `stages.advance()`. `null` when everything was saved.
+   */
+  warning: string | null;
 }
 
 /** Filters accepted by `plants.list()`. */
@@ -229,7 +311,39 @@ export interface ExplantSummary {
   initial_count: number | null;
   current_count: number | null;
   created_at: string | null;
+  /** The lab's own fields. See {@link CustomFieldValues}. */
+  custom_fields: CustomFieldValues;
 }
+
+export type ExplantStatus =
+  | "active"
+  | "establishing"
+  | "growing"
+  | "needs_subculture"
+  | "quarantined"
+  | "senescing"
+  | "discarded"
+  | "retired"
+  | "lost";
+
+/** Payload sent when creating an explant (batch). */
+export interface ExplantCreateInput {
+  /** 1–200 characters. */
+  label: string;
+  /** The plant it was initiated from. */
+  plant_id?: string | null;
+  /** Up to 100 characters. */
+  batch_number?: string | null;
+  /** Up to 5000 characters. */
+  notes?: string | null;
+  status?: ExplantStatus;
+  /** Your own identifier, 1–100 characters. One already in use answers `409 DUPLICATE_ENTRY`. */
+  external_id?: string | null;
+  custom_fields?: CustomFieldValues;
+}
+
+/** Payload sent when updating an explant. Only the fields you send change. */
+export type ExplantUpdateInput = Partial<Omit<ExplantCreateInput, "plant_id">>;
 
 /** Filters accepted by `explants.list()`. */
 export interface ExplantListParams extends PageParams {
@@ -913,11 +1027,16 @@ export interface EquipmentUsageEventInput {
   notes?: string;
 }
 
-export type EquipmentMaintenanceKind = "calibration" | "service" | "fault" | "verification";
+export type EquipmentMaintenanceKind = "calibration" | "preventive_maintenance";
 
-export type EquipmentMaintenanceOutcome = "pass" | "fail" | "adjusted" | "inconclusive";
+export type EquipmentMaintenanceOutcome =
+  | "pass"
+  | "pass_after_adjustment"
+  | "out_of_tolerance"
+  | "fail"
+  | "not_performed";
 
-/** "This equipment was calibrated, serviced, verified, or faulted." */
+/** "This equipment was calibrated, or had preventive maintenance." */
 export interface EquipmentMaintenanceEventInput {
   kind: EquipmentMaintenanceKind;
   /** Defaults to `"pass"`. */
@@ -940,4 +1059,463 @@ export interface EquipmentEvent {
   equipmentId: string;
   kind: string;
   recordedAt: string;
+}
+
+/** An equipment item in the lab's library. */
+export interface EquipmentItem {
+  id: string;
+  name: string;
+  category: EquipmentCategory | (string & {});
+  /** `"active"` or `"archived"`. */
+  status: string;
+  manufacturer: string | null;
+  model: string | null;
+  serial_number: string | null;
+  location: string | null;
+  purchase_date: string | null;
+  vendor_url: string | null;
+  notes: string | null;
+  last_calibrated_at: string | null;
+  next_calibration_due_at: string | null;
+  last_maintenance_at: string | null;
+  next_maintenance_due_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export type EquipmentCategory =
+  | "balance_scale"
+  | "autoclave_pressure_cooker"
+  | "laminar_flow_hood"
+  | "still_air_box"
+  | "incubator"
+  | "light_rack"
+  | "fridge_freezer"
+  | "ph_ec_meter"
+  | "microscope"
+  | "label_printer"
+  | "other";
+
+/** Filters accepted by `equipment.list()`. */
+export interface EquipmentListParams extends PageParams {
+  category?: EquipmentCategory;
+  status?: "active" | "archived";
+}
+
+/** One entry in an equipment item's history, from `equipment.listEvents()`. */
+export interface EquipmentHistoryEntry {
+  id: string;
+  equipment_id: string;
+  /** `"used"`, `"calibration"` or `"preventive_maintenance"`. */
+  kind: string;
+  occurred_at: string | null;
+  outcome: string | null;
+  subject_type: string | null;
+  subject_id: string | null;
+  subject_label: string | null;
+  performed_by_name: string | null;
+  provider: string | null;
+  as_found_condition: string | null;
+  as_left_condition: string | null;
+  result_summary: string | null;
+  certificate_number: string | null;
+  certificate_url: string | null;
+  next_due_at: string | null;
+  notes: string | null;
+}
+
+/** Filters accepted by `equipment.listEvents()`. */
+export interface EquipmentHistoryParams extends PageParams {
+  kind?: "used" | EquipmentMaintenanceKind;
+  /** ISO 8601 — only entries at or after this instant. */
+  from?: string;
+  /** ISO 8601 — only entries before this instant. */
+  to?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Contaminations
+// ---------------------------------------------------------------------------
+
+export type ContaminationType =
+  | "mold"
+  | "bacteria"
+  | "hyperhydricity"
+  | "phenolic"
+  | "algae"
+  | "yeast"
+  | "endophytic"
+  | "viral"
+  | "fungal"
+  | "physiological"
+  | "contaminated_media"
+  | "damage"
+  | "insect"
+  | "other";
+
+export type ContaminationSeverity = "very low" | "low" | "medium" | "high" | "critical";
+
+export type ContaminationStatus =
+  | "active"
+  | "resolved"
+  | "quarantined"
+  | "archived"
+  | "under investigation";
+
+export type ContaminationSource =
+  | "airborne"
+  | "cross"
+  | "media"
+  | "observed"
+  | "tool"
+  | "transferred"
+  | "unknown";
+
+export interface Contamination {
+  id: string;
+  workspace_id: string | null;
+  type: ContaminationType | (string & {}) | null;
+  /** The description when `type` is `"other"`. */
+  type_other: string | null;
+  issue: string;
+  description: string | null;
+  notes: string | null;
+  severity: string;
+  status: string;
+  observed_at: string | null;
+  resolved_at: string | null;
+  vessels_affected: number | null;
+  plants_affected: number | null;
+  affected_vessel_markings: string | null;
+  custom_fields: CustomFieldValues;
+  plant_ids: string[];
+  explant_ids: string[];
+  logged_by: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** Filters accepted by `contaminations.list()`. */
+export interface ContaminationListParams extends PageParams {
+  plant_id?: string;
+  explant_id?: string;
+  status?: ContaminationStatus;
+  /** ISO 8601 — only contaminations logged at or after this instant. */
+  since?: string;
+}
+
+/** Payload sent when logging a contamination. */
+export interface ContaminationCreateInput {
+  plant_id?: string;
+  explant_id?: string;
+  type: ContaminationType;
+  /** Required in practice when `type` is `"other"`. 1–200 characters. */
+  type_other?: string;
+  /** A short summary, 1–300 characters. */
+  issue: string;
+  /** Up to 5000 characters. */
+  description?: string;
+  /** Up to 5000 characters. */
+  notes?: string;
+  severity?: ContaminationSeverity;
+  status?: ContaminationStatus;
+  suspected_source?: ContaminationSource;
+  /** ISO 8601. Defaults to now. */
+  observed_at?: string;
+  vessels_affected?: number;
+  plants_affected?: number;
+  /** Up to 500 characters. */
+  affected_vessel_markings?: string;
+  custom_fields?: CustomFieldValues | null;
+}
+
+// ---------------------------------------------------------------------------
+// Comments
+// ---------------------------------------------------------------------------
+
+/** The records a comment can be attached to. */
+export type CommentEntityType =
+  | "plant"
+  | "explant"
+  | "contamination"
+  | "task"
+  | "media_recipe"
+  | "sop";
+
+/** A link from a comment to another record. */
+export interface CommentReference {
+  entity_type: CommentEntityType;
+  entity_id: string;
+  /** 1–200 characters. */
+  label: string;
+}
+
+export interface Comment {
+  id: string;
+  entity_type: CommentEntityType;
+  entity_id: string;
+  /** The comment this replies to, or `null` for a top-level comment. */
+  parent_id: string | null;
+  body: string;
+  status: string;
+  is_pinned: boolean;
+  author: { id: string; name: string | null };
+  mentioned_user_ids: string[];
+  references: CommentReference[];
+  created_at: string | null;
+  updated_at: string | null;
+  edited_at: string | null;
+}
+
+/** The record whose comments `comments.list()` returns, plus paging. */
+export interface CommentListParams extends PageParams {
+  entity_type: CommentEntityType;
+  entity_id: string;
+}
+
+/** Payload sent when adding a comment. */
+export interface CommentCreateInput {
+  entity_type: CommentEntityType;
+  entity_id: string;
+  /**
+   * 1–5000 characters. A body containing a signed URL that will expire is
+   * refused with 422 — link to the record instead.
+   */
+  body: string;
+  /** Reply to this comment. */
+  parent_id?: string;
+  /** Workspace members to notify. */
+  mentioned_user_ids?: string[];
+  references?: CommentReference[];
+}
+
+// ---------------------------------------------------------------------------
+// Assets — photos and media on records
+// ---------------------------------------------------------------------------
+
+/** The records an asset can be attached to. */
+export type AssetTarget = "plant" | "explant" | "contamination" | "sop";
+
+export interface Asset {
+  id: string;
+  target: AssetTarget;
+  target_id: string;
+  kind: string;
+  file_name: string | null;
+  content_type: string | null;
+  caption: string | null;
+  captured_at: string | null;
+  uploaded_by: string | null;
+  created_at: string | null;
+  /**
+   * A short-lived link to the file. It stops working at `view_url_expires_at`
+   * (about 15 minutes) — fetch the asset again for a fresh one, and never store
+   * it.
+   */
+  view_url: string | null;
+  view_url_expires_at: string | null;
+}
+
+/** The record whose assets `assets.list()` returns, plus paging. */
+export interface AssetListParams extends PageParams {
+  target: AssetTarget;
+  target_id: string;
+}
+
+interface AssetCreateFields {
+  target: AssetTarget;
+  target_id: string;
+  /** 1–200 characters. */
+  filename?: string;
+  /** 1–500 characters. */
+  caption?: string;
+}
+
+/**
+ * Payload sent when attaching an image: either a URL the API fetches, or the
+ * file's bytes as base64. A file that is too large answers
+ * `413 PAYLOAD_TOO_LARGE`; an unsupported type `415 UNSUPPORTED_MEDIA_TYPE`; a
+ * URL that could not be fetched `422 IMAGE_URL_FETCH_FAILED`.
+ */
+export type AssetCreateInput = AssetCreateFields &
+  (
+    | { /** A public https URL, up to 2048 characters. */ image_url: string; image_base64?: never }
+    | { /** The file's bytes, base64-encoded. */ image_base64: string; image_url?: never }
+  );
+
+// ---------------------------------------------------------------------------
+// Media recipes
+// ---------------------------------------------------------------------------
+
+export type MediaRecipeStatus = "active" | "archived" | "deprecated" | "draft" | "published";
+
+export interface MediaRecipeComponent {
+  id: string;
+  name: string;
+  /** Quantity as written, e.g. `"4.4"`. */
+  qty: string;
+  unit: string | null;
+  concentration: string | null;
+}
+
+export interface MediaRecipe {
+  id: string;
+  title: string;
+  status: string | null;
+  origin: string | null;
+  /** `"private"` or `"team"`. */
+  visibility: string;
+  is_public: boolean;
+  notes: string | null;
+  ph_target: number | null;
+  sterilization_notes: string | null;
+  storage_notes: string | null;
+  usage_notes: string | null;
+  components: MediaRecipeComponent[];
+  version: number;
+  created_by: string;
+  created_at: string | null;
+}
+
+/** Filters accepted by `mediaRecipes.list()`. */
+export interface MediaRecipeListParams extends PageParams {
+  status?: MediaRecipeStatus;
+}
+
+/** A component in a recipe you write. `id` is optional; one is generated. */
+export interface MediaRecipeComponentInput {
+  id?: string;
+  /** 1–200 characters. */
+  name: string;
+  /** 1–50 characters, e.g. `"4.4"`. */
+  qty: string;
+  /** 1–20 characters, e.g. `"g/L"`. */
+  unit?: string;
+  concentration?: string;
+}
+
+/** Payload sent when creating a media recipe. */
+export interface MediaRecipeCreateInput {
+  /** 1–200 characters. */
+  title: string;
+  components: MediaRecipeComponentInput[];
+  /** Up to 500 characters. */
+  notes?: string;
+  status?: MediaRecipeStatus;
+  visibility?: "private" | "team";
+  is_public?: boolean;
+  origin?: "user" | "imported";
+  /** 0–14. */
+  ph_target?: number | null;
+  sterilization_notes?: string | null;
+  storage_notes?: string | null;
+  usage_notes?: string | null;
+}
+
+/**
+ * Payload sent when updating a media recipe. Only the fields you send change.
+ * A teammate's recipe answers `403 MEDIA_RECIPE_NOT_OWNER`.
+ */
+export type MediaRecipeUpdateInput = Partial<Omit<MediaRecipeCreateInput, "origin" | "notes">> & {
+  notes?: string | null;
+};
+
+// ---------------------------------------------------------------------------
+// Culture line pricing
+// ---------------------------------------------------------------------------
+
+export interface CultureLinePrice {
+  id: string;
+  /** The plant (culture line) this price is for. */
+  plant_id: string;
+  list_price: Money;
+  wholesale_price: Money | null;
+  previous_list_price: Money | null;
+  pricing_tier: string | null;
+  tier_score: string | null;
+  price_source: string;
+  price_source_at: string | null;
+  notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** Filters accepted by `pricing.listCultureLines()`. */
+export interface CultureLinePriceListParams extends PageParams {
+  plant_id?: string;
+  /** 1–40 characters. */
+  pricing_tier?: string;
+}
+
+/** A change to a culture line's list price. */
+export interface PriceEvent {
+  id: string;
+  plant_id: string;
+  list_price: Money;
+  previous_list_price: Money | null;
+  price_source: string;
+  changed_by: string | null;
+  changed_at: string | null;
+}
+
+/** Filters accepted by `pricing.listEvents()`. */
+export interface PriceEventListParams extends PageParams {
+  plant_id?: string;
+  /** ISO 8601. */
+  from?: string;
+  /** ISO 8601. */
+  to?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Commerce — store order lines and sell-through
+// ---------------------------------------------------------------------------
+
+/** One line of a store order, as read from a connected store. */
+export interface OrderLine {
+  id: string;
+  product_link_id: string | null;
+  plant_id: string | null;
+  store_product_id: string | null;
+  store_variant_id: string | null;
+  quantity: number;
+  unit_price: Money | null;
+  occurred_at: string | null;
+}
+
+/** Filters accepted by `commerce.listOrderLines()`. */
+export interface OrderLineListParams extends PageParams {
+  /** ISO 8601. */
+  from?: string;
+  /** ISO 8601. */
+  to?: string;
+  product_link_id?: string;
+}
+
+/**
+ * Units sold and revenue for one culture line in one currency. Revenue is never
+ * summed across currencies: a line sold in two currencies is two rows.
+ */
+export interface SellThroughRow {
+  plant_id: string | null;
+  currency: string | null;
+  units: number;
+  revenue: Money;
+  order_line_count: number;
+  /** Order lines that carried a price. Revenue covers these only. */
+  priced_line_count: number;
+  first_occurred_at: string | null;
+  last_occurred_at: string | null;
+}
+
+/** Filters accepted by `commerce.getSellThrough()`. */
+export interface SellThroughParams {
+  /** ISO 8601. */
+  from?: string;
+  /** ISO 8601. */
+  to?: string;
+  plant_id?: string;
+  /** Defaults to 50, capped at 200. */
+  limit?: number;
+  offset?: number;
 }

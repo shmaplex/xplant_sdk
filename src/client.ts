@@ -16,13 +16,19 @@ import {
   type ResolvedRetry,
   type RetryOptions,
 } from "./retry.js";
+import { AssetsResource } from "./resources/assets.js";
+import { CommentsResource } from "./resources/comments.js";
+import { CommerceResource } from "./resources/commerce.js";
+import { ContaminationsResource } from "./resources/contaminations.js";
 import { DevicesResource } from "./resources/devices.js";
 import { EquipmentResource } from "./resources/equipment.js";
 import { EventsResource } from "./resources/events.js";
 import { ExplantsResource } from "./resources/explants.js";
 import { LabelsResource } from "./resources/labels.js";
+import { MediaRecipesResource } from "./resources/media-recipes.js";
 import { MeResource } from "./resources/me.js";
 import { PlantsResource } from "./resources/plants.js";
+import { PricingResource } from "./resources/pricing.js";
 import { SensorReadingsResource } from "./resources/sensor-readings.js";
 import { SopRunsResource } from "./resources/sop-runs.js";
 import { SopsResource } from "./resources/sops.js";
@@ -417,8 +423,38 @@ export class XPlantClient {
     return new SensorReadingsResource(this.send);
   }
 
-  /** Record equipment use and maintenance — requires the `write:equipment_events` scope */
+  /** Read the equipment library and record use and maintenance — `read:equipment` / `write:equipment_events` */
   get equipment(): EquipmentResource {
     return new EquipmentResource(this.send);
+  }
+
+  /** Read and log contaminations — `read:contaminations` / `write:contaminations` */
+  get contaminations(): ContaminationsResource {
+    return new ContaminationsResource(this.send);
+  }
+
+  /** Read and add comments on records — `read:comments` / `write:comments` */
+  get comments(): CommentsResource {
+    return new CommentsResource(this.send);
+  }
+
+  /** Read and attach photos and media — `read:assets` / `write:assets` */
+  get assets(): AssetsResource {
+    return new AssetsResource(this.send);
+  }
+
+  /** Read and write media recipes — `read:media_recipes` / `write:media_recipes` */
+  get mediaRecipes(): MediaRecipesResource {
+    return new MediaRecipesResource(this.send);
+  }
+
+  /** Read culture line prices and price history — `read:pricing`, manager role */
+  get pricing(): PricingResource {
+    return new PricingResource(this.send);
+  }
+
+  /** Read store order lines and sell-through — `read:commerce`, manager role */
+  get commerce(): CommerceResource {
+    return new CommerceResource(this.send);
   }
 }

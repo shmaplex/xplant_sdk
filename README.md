@@ -22,11 +22,15 @@ Connect sensors, Raspberry Pis, Arduino devices, scripts, and external tools to 
 > diverged and npm briefly served the stale one (see [#4](https://github.com/shmaplex/xplant_sdk/issues/4)).
 > Publishes to that name happen from this repository's `main` branch only.
 
-**Documentation:** the guides and endpoint reference for the xPlant API —
-quickstart, authentication, scopes, and every endpoint with its request and
-response — live in [**xplant_os/docs**](https://github.com/shmaplex/xplant_os/tree/main/docs).
-This README covers the JavaScript/TypeScript SDK. Hardware examples live in the
-same [xplant_os](https://github.com/shmaplex/xplant_os) repository.
+**Documentation:** the guides and endpoint reference for the xPlant API live at
+[**docs.xplantpro.com**](https://docs.xplantpro.com/docs). They cover the
+[quickstart](https://docs.xplantpro.com/docs/quickstart),
+[authentication and plans](https://docs.xplantpro.com/docs/authentication),
+[scopes](https://docs.xplantpro.com/docs/scopes),
+[errors](https://docs.xplantpro.com/docs/errors), and
+[every endpoint](https://docs.xplantpro.com/docs/api) with its request and
+response. This README covers the JavaScript/TypeScript SDK. Hardware examples
+live in the [xplant_os](https://github.com/shmaplex/xplant_os) repository.
 
 ---
 
@@ -73,21 +77,47 @@ and edge or serverless functions.
 
 ## Plans and access
 
-The xPlant API is included with **xPlant+ Teams** and **Enterprise**. On other
-plans, requests answer `402 PAID_PLAN_REQUIRED` — see
-[plans](https://www.xplantpro.com/en/subscriptions) to upgrade.
+**Your key can never do more than you can in xPlant.** It unlocks what your
+plan includes, and what your role allows.
 
-Your key unlocks what your plan allows:
+| Plan | What API keys can do |
+|---|---|
+| **xPlant+ Teams** and **Enterprise** | The full API: every scope |
+| **xPlant+ Hobby** and **xPlant+ Pro Lab** | Connect devices only: `read:devices`, `write:devices`, `write:sensor_readings`, `write:device_events` |
+| **Free** | No API access |
 
-- **Scopes decide what a key can reach.** You pick them when you create the key.
-  Give each integration only the scopes it needs, and a separate key per
-  integration, so one can be revoked without touching the others.
-- **Your plan's allowances still apply.** For example, the number of devices
-  you can connect at once comes from your plan; registering one past it answers
-  `402 DEVICE_LIMIT_REACHED`. The [plans page](https://www.xplantpro.com/en/subscriptions)
-  lists each plan's allowances.
-- **A key acts in one workspace** — the one it was created in — and only while
-  its owner is still a member there.
+See [plans](https://www.xplantpro.com/en/subscriptions) to upgrade.
+
+What decides what a key can do:
+
+- **Scopes.** You pick them when you create the key. Give each integration only
+  the scopes it needs, and a separate key per integration, so one can be
+  revoked without touching the others. A key can't be created with scopes your
+  role or plan doesn't allow; the refusal names them.
+- **Your role in the workspace.** Every request is checked against the key
+  owner's *current* role, so a key loses access the moment its owner is
+  demoted:
+  - reads need any active member
+  - writes need `member` or above
+  - `read:pricing`, `read:commerce` and `write:demand` need `manager` or above
+- **Your plan.** Beyond the tiers above, some features have their own plan
+  gate, such as culture line pricing and equipment calibration history. The
+  plan's allowances still apply too: the number of devices you can connect at
+  once, and record limits. See the [plans page](https://www.xplantpro.com/en/subscriptions).
+- **One workspace.** A key acts only in the workspace it was created in, and
+  only while its owner is still a member there.
+
+`client.me.get()` returns `effectiveScopes` — what the key can use right now,
+after all of that — plus the owner's `role` and the workspace's `apiAccess`
+(`"full"` or `"devices"`), so an integration can check before it starts.
+
+| Status | Means |
+|---|---|
+| `402` | The **plan** doesn't include this (`PAID_PLAN_REQUIRED`, `FEATURE_NOT_INCLUDED`, `PLAN_LIMIT_REACHED`, `DEVICE_LIMIT_REACHED`) |
+| `403` | The **key or its owner** can't do this: a missing scope, or a role that isn't allowed. The message names which. |
+
+Device tokens keep posting readings, events and heartbeats if a plan lapses, so
+a grow room never goes dark. New devices and tokens follow the plan.
 
 **Enterprise** can scope organisation-specific integrations and API
 requirements. Contact [support@xplantpro.com](mailto:support@xplantpro.com).
@@ -172,9 +202,9 @@ every scope the key holds, so an integration can check before it starts.
 | *(none)* | Describe the key itself | `me.get` |
 | `read:workspace` | Read workspace and lab settings | `workspaces.list` |
 | `read:plants` | Read plant records | `plants.list`, `plants.get`, `plants.findByExternalId` |
-| `write:plants` | Create and update plant records | *No endpoint yet* |
+| `write:plants` | Create and update plant records | `plants.create`, `plants.update` |
 | `read:explants` | Read explant records | `explants.list`, `explants.get`, `explants.findByExternalId` |
-| `write:explants` | Create and update explant records | *No endpoint yet* |
+| `write:explants` | Create and update explant records | `explants.create`, `explants.update` |
 | `read:transfers` | Read transfer and stage history | `stages.list`, `transfers.list` |
 | `write:transfers` | Record transfers and advance stages | `stages.advance`, `transfers.create` |
 | `read:events` | Read plant and explant change history | `events.list` |
@@ -193,13 +223,17 @@ every scope the key holds, so an integration can check before it starts.
 | `read:sensor_readings` | Query sensor readings | `sensorReadings.list` |
 | `write:sensor_readings` | Submit sensor readings | `sensorReadings.create`, `sensorReadings.createBatch` |
 | `write:equipment_events` | Record equipment use and maintenance | `equipment.recordEvent` |
-| `read:equipment` | Read the equipment library | *No endpoint yet* |
-| `read:contaminations` / `write:contaminations` | Contamination logs | *No endpoint yet* |
-| `read:comments` / `write:comments` | Notes and comments on records | *No endpoint yet* |
-| `read:assets` / `write:assets` | Photos and media on records | *No endpoint yet* |
-| `read:media_recipes` / `write:media_recipes` | Media recipes | *No endpoint yet* |
-| `read:pricing` | Culture line pricing | *No endpoint yet* |
-| `read:commerce` | Store order lines and sell-through | *No endpoint yet* |
+| `read:equipment` | Read the equipment library and its history | `equipment.list`, `equipment.get`, `equipment.listEvents` |
+| `read:contaminations` | Read contamination logs | `contaminations.list`, `contaminations.get` |
+| `write:contaminations` | Log contaminations | `contaminations.create` |
+| `read:comments` | Read comments on records | `comments.list` |
+| `write:comments` | Add comments to records | `comments.create` |
+| `read:assets` | Read photos and media on records | `assets.list`, `assets.get` |
+| `write:assets` | Attach photos and media | `assets.create` |
+| `read:media_recipes` | Read media recipes | `mediaRecipes.list`, `mediaRecipes.get` |
+| `write:media_recipes` | Create and update media recipes | `mediaRecipes.create`, `mediaRecipes.update` |
+| `read:pricing` | Culture line pricing (manager role) | `pricing.listCultureLines`, `pricing.listEvents` |
+| `read:commerce` | Store order lines and sell-through (manager role) | `commerce.listOrderLines`, `commerce.getSellThrough` |
 
 A device token carries no scopes: it may use only `devices.heartbeat`,
 `devices.recordEvent`, `sensorReadings.create` and `sensorReadings.createBatch`,
@@ -248,10 +282,17 @@ Each heading gives the endpoint and the scope it needs. The examples assume a
 ```typescript
 // GET /api/v1/me — no scope needed
 const me = await client.me.get();
-me.key;        // { id, name, prefix, environment, status, lastUsedAt, createdAt }
-me.scopes;     // ["read:plants", "write:tasks", …]
-me.workspace;  // { id }
-me.user;       // { id }
+me.key;             // { id, name, prefix, environment, status, lastUsedAt, createdAt }
+me.scopes;          // every scope the key was created with
+me.effectiveScopes; // what it can use right now, after the owner's role and the plan
+me.role;            // owner | admin | manager | member | viewer | guest
+me.apiAccess;       // "full" (Teams, Enterprise) or "devices" (Hobby, Pro Lab)
+me.workspace;       // { id }
+me.user;            // { id }
+
+if (!me.effectiveScopes.includes("write:tasks")) {
+  throw new Error(`This key can't create tasks (role: ${me.role}, API access: ${me.apiAccess})`);
+}
 ```
 
 ### `client.workspaces`
@@ -280,7 +321,24 @@ const plant = await client.plants.get("plant-uuid");
 
 // Resolve your own identifier (e.g. "LINE-0412") — resolves to the plant or null
 const match = await client.plants.findByExternalId("LINE-0412");
+
+// POST /api/v1/plants — write:plants. Safe to retry with an Idempotency-Key.
+const { plant, warning } = await client.plants.create({
+  species: "Alocasia zebrina",
+  external_id: "LINE-0412",       // an id already in use answers 409 DUPLICATE_ENTRY
+  initial_stage: "Mother Block",
+  custom_fields: { tray: "B4" },  // the lab's own fields, as set up in settings
+});
+// `warning` is set only if the plant saved but its first stage didn't
+
+// PATCH /api/v1/plants/{id} — write:plants. Only the fields you send change.
+await client.plants.update(plant.id, { status: "in_culture" });
 ```
+
+Every plant and explant carries `custom_fields`: the lab's own fields, keyed as
+set up in the lab's settings. Editing a teammate's record needs its creator or
+a manager (`403 PLANT_WRITE_FORBIDDEN` / `EXPLANT_WRITE_FORBIDDEN`), and a
+workspace at its plan's record limit answers `402 PLAN_LIMIT_REACHED`.
 
 ### `client.explants`
 
@@ -295,6 +353,16 @@ const batch = await client.explants.get("explant-uuid");
 
 // Resolve your own batch identifier — resolves to the batch or null
 const match = await client.explants.findByExternalId("LINE-0412");
+
+// POST /api/v1/explants — write:explants. Safe to retry with an Idempotency-Key.
+const created = await client.explants.create({
+  label: "B-2026-114",
+  plant_id: "plant-uuid",
+  external_id: "B-2026-114",
+});
+
+// PATCH /api/v1/explants/{id} — write:explants
+await client.explants.update(created.id, { status: "needs_subculture" });
 ```
 
 ### `client.stages`
@@ -547,7 +615,8 @@ await client.devices.recordEvent({
 ```
 
 A workspace that has connected every device its plan includes answers
-`402 DEVICE_LIMIT_REACHED` on `register()`.
+`402 DEVICE_LIMIT_REACHED` on `register()`, and so does one whose plan includes
+no devices.
 
 ### `client.sensorReadings`
 
@@ -619,10 +688,24 @@ process.on("SIGTERM", () => buffer.close().finally(() => process.exit(0)));
 ### `client.equipment`
 
 ```typescript
+// GET /api/v1/equipment — read:equipment
+for await (const item of client.equipment.list({ status: "active" })) {
+  console.log(item.name, item.category, item.next_calibration_due_at);
+}
+
+// GET /api/v1/equipment/{id}
+const autoclave = await client.equipment.get("autoclave-uuid");
+
+// GET /api/v1/equipment/{id}/events — its history. Calibration and maintenance
+// history needs a plan that includes it (402 FEATURE_NOT_INCLUDED otherwise).
+for await (const entry of client.equipment.listEvents(autoclave.id, { kind: "calibration" })) {
+  console.log(entry.occurred_at, entry.outcome, entry.certificate_number);
+}
+
 // POST /api/v1/equipment/{id}/events — write:equipment_events
-await client.equipment.recordEvent("autoclave-uuid", {
-  kind: "calibration",         // calibration | service | fault | verification
-  outcome: "pass",             // pass | fail | adjusted | inconclusive (default pass)
+await client.equipment.recordEvent(autoclave.id, {
+  kind: "calibration",         // calibration | preventive_maintenance
+  outcome: "pass",             // pass | pass_after_adjustment | out_of_tolerance | fail | not_performed
   result_summary: "121.1 °C held for 15 min",
 });
 
@@ -634,6 +717,142 @@ await client.equipment.recordEvent("hood-uuid", {
   subject_id: run.id,
 });
 ```
+
+### `client.contaminations`
+
+```typescript
+// GET /api/v1/contaminations — read:contaminations. Newest first.
+for await (const c of client.contaminations.list({ status: "active", explant_id: "explant-uuid" })) {
+  console.log(c.issue, c.severity, c.vessels_affected);
+}
+
+// GET /api/v1/contaminations/{id}
+const log = await client.contaminations.get("contamination-uuid");
+
+// POST /api/v1/contaminations — write:contaminations. Safe to retry with an Idempotency-Key.
+await client.contaminations.create({
+  explant_id: "explant-uuid",
+  type: "fungal",              // mold | bacteria | fungal | yeast | viral | … | other
+  issue: "White fuzz at the media line",
+  severity: "high",            // very low | low | medium | high | critical
+  suspected_source: "airborne",
+  vessels_affected: 3,
+});
+```
+
+### `client.comments`
+
+```typescript
+// GET /api/v1/comments — read:comments. The comments on one record.
+for await (const c of client.comments.list({ entity_type: "explant", entity_id: "explant-uuid" })) {
+  console.log(c.author.name, c.body);
+}
+
+// POST /api/v1/comments — write:comments. Safe to retry with an Idempotency-Key.
+await client.comments.create({
+  entity_type: "explant",      // plant | explant | contamination | task | media_recipe | sop
+  entity_id: "explant-uuid",
+  body: "Moved to shelf 3 after the second transfer.",
+  // parent_id: "comment-uuid",  — reply to a comment
+});
+```
+
+A body containing a signed link that will expire is refused with 422. Link to
+the record instead.
+
+### `client.assets` — photos and media
+
+```typescript
+// GET /api/v1/assets — read:assets. The assets on one record.
+for await (const photo of client.assets.list({ target: "explant", target_id: "explant-uuid" })) {
+  console.log(photo.caption, photo.view_url);
+}
+
+// GET /api/v1/assets/{id} — with a fresh view_url
+const photo = await client.assets.get("asset-uuid");
+
+// POST /api/v1/assets — write:assets. From a URL the API fetches…
+await client.assets.create({
+  target: "explant",           // plant | explant | contamination | sop
+  target_id: "explant-uuid",
+  image_url: "https://example.com/photos/jar-12.jpg",
+  caption: "Week 3, jar 12",
+});
+// …or as base64: { target, target_id, image_base64, filename }
+```
+
+`view_url` works for about 15 minutes (`view_url_expires_at`). Fetch the asset
+again for a fresh link, and never store one. A file that is too large answers
+`413 PAYLOAD_TOO_LARGE`, an unsupported type `415 UNSUPPORTED_MEDIA_TYPE`, and
+an image URL that couldn't be fetched `422 IMAGE_URL_FETCH_FAILED`.
+
+### `client.mediaRecipes`
+
+```typescript
+// GET /api/v1/media-recipes — read:media_recipes
+for await (const recipe of client.mediaRecipes.list({ status: "active" })) {
+  console.log(recipe.title, recipe.ph_target, recipe.components.length);
+}
+
+// GET /api/v1/media-recipes/{id}
+const recipe = await client.mediaRecipes.get("recipe-uuid");
+
+// POST /api/v1/media-recipes — write:media_recipes. Safe to retry with an Idempotency-Key.
+const created = await client.mediaRecipes.create({
+  title: "MS + 2 mg/L BAP",
+  components: [
+    { name: "MS basal salts", qty: "4.4", unit: "g/L" },
+    { name: "Sucrose", qty: "30", unit: "g/L" },
+    { name: "BAP", qty: "2", unit: "mg/L" },
+  ],
+  ph_target: 5.7,
+  visibility: "team",
+});
+
+// PATCH /api/v1/media-recipes/{id} — only the recipe's author can edit it
+await client.mediaRecipes.update(created.id, { status: "archived" });
+```
+
+### `client.pricing` — culture line pricing
+
+Pricing needs the `read:pricing` scope, a key owner who is a `manager` or
+above, and a plan that includes pricing (`402 FEATURE_NOT_INCLUDED` otherwise).
+
+```typescript
+// GET /api/v1/pricing/culture-lines — the current price per culture line
+for await (const price of client.pricing.listCultureLines()) {
+  console.log(price.plant_id, price.list_price.amount, price.list_price.currency);
+}
+
+// GET /api/v1/pricing/events — list-price changes over time
+for await (const change of client.pricing.listEvents({ plant_id: "plant-uuid" })) {
+  console.log(change.changed_at, change.previous_list_price?.amount, "→", change.list_price.amount);
+}
+```
+
+Amounts are exact decimals written as text (`"1250.00"`), so parse them with a
+decimal type, not `Number()`, when the value matters.
+
+### `client.commerce` — store orders and sell-through
+
+The same requirements as pricing apply: `read:commerce`, `manager` or above, and
+a plan that includes pricing.
+
+```typescript
+// GET /api/v1/commerce/order-lines — order lines read from a connected store
+for await (const line of client.commerce.listOrderLines({ from: "2026-09-01T00:00:00Z" })) {
+  console.log(line.plant_id, line.quantity, line.unit_price?.amount);
+}
+
+// GET /api/v1/commerce/sell-through — units and revenue per culture line
+const rows = await client.commerce.getSellThrough({ from: "2026-07-01T00:00:00Z" });
+for (const row of rows) {
+  console.log(row.plant_id, row.units, row.revenue.amount, row.currency);
+}
+```
+
+Sell-through has one row per culture line **and currency**. Revenue is never
+added up across currencies.
 
 ---
 
@@ -658,6 +877,8 @@ for await (const page of client.explants.list({ limit: 200 }).pages()) {
 ```
 
 This works for `plants`, `explants`, `stages`, `transfers`, `events`, `tasks`,
+`contaminations`, `comments`, `assets`, `mediaRecipes`, `equipment`,
+`equipment.listEvents`, `pricing`, `commerce`,
 `taskDemand` and `sops`. `limit` sets the page size.
 
 **Cursors.** The API is moving its lists from offsets to cursors, which stay
@@ -727,16 +948,24 @@ own `signal` rejects with the signal's reason instead.
 |---|---|---|
 | 400, 422 | `VALIDATION_ERROR` | The request failed validation; the message names the field |
 | 401 | `UNAUTHORIZED` | No key, an unknown or revoked key or device token, or the key's owner left the workspace |
-| 402 | `PAID_PLAN_REQUIRED` | The workspace's plan does not include the API — see [Plans and access](#plans-and-access) |
+| 402 | `PAID_PLAN_REQUIRED` | The plan doesn't include this part of the API — see [Plans and access](#plans-and-access) |
+| 402 | `FEATURE_NOT_INCLUDED` | The plan doesn't include this feature (e.g. pricing, calibration history) |
+| 402 | `PLAN_LIMIT_REACHED` | The workspace has reached a record limit its plan sets |
 | 402 | `DEVICE_LIMIT_REACHED` | The workspace has connected every device its plan includes |
-| 403 | `FORBIDDEN` | The key lacks the scope; the message names it |
+| 403 | `FORBIDDEN` | The key lacks the scope, or its owner's role can't use it; the message names which |
+| 403 | `PLANT_WRITE_FORBIDDEN`, `EXPLANT_WRITE_FORBIDDEN` | Editing a teammate's record needs its creator or a manager |
+| 403 | `MEDIA_RECIPE_NOT_OWNER` | Only a recipe's author can edit it |
 | 403 | `DEVICE_TOKEN_NOT_ACCEPTED` | A device token was sent to an endpoint that needs a workspace key |
 | 403 | `DEVICE_TOKEN_WRONG_DEVICE` | A device token tried to write about another device |
-| 404 | `NOT_FOUND` | Not found — or in another workspace; the API does not distinguish |
+| 404 | `NOT_FOUND` | Not found, in another workspace, or a malformed id; the API does not distinguish |
 | 409 | `IDEMPOTENCY_IN_FLIGHT` | A request with this `Idempotency-Key` is still running; retry shortly |
 | 422 | `INVALID_CURSOR` | The cursor is malformed, from another endpoint, or used with other filters; start from the first page |
 | 409 | `SOP_RUN_NOT_EFFECTIVE`, `SOP_RUN_CLOSED` | The SOP has no version in force; the run is complete |
 | 409 | `DEVICE_INGEST_DISABLED` | A device in the batch is paused or retired |
+| 409 | `DUPLICATE_ENTRY` | The `external_id` is already in use |
+| 413 | `PAYLOAD_TOO_LARGE` | The uploaded file is too large |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | The uploaded file's type isn't supported |
+| 422 | `IMAGE_URL_FETCH_FAILED` | The image at `image_url` couldn't be fetched |
 | 429 | `RATE_LIMIT_EXCEEDED` | A rate limit is spent; wait `err.retryAfter` seconds |
 | 500 | `*_FAILED` | The server could not complete the request |
 | 503 | `DEVICE_LIMIT_UNAVAILABLE` | The device allowance could not be checked; nothing was registered |
@@ -823,6 +1052,12 @@ These endpoints honour it:
 | `POST /api/v1/stages` | `stages.advance` |
 | `POST /api/v1/transfers` | `transfers.create` |
 | `POST /api/v1/devices` | `devices.register` |
+| `POST /api/v1/plants` | `plants.create` |
+| `POST /api/v1/explants` | `explants.create` |
+| `POST /api/v1/contaminations` | `contaminations.create` |
+| `POST /api/v1/comments` | `comments.create` |
+| `POST /api/v1/assets` | `assets.create` |
+| `POST /api/v1/media-recipes` | `mediaRecipes.create` |
 | `POST /api/v1/sop-runs` | `sopRuns.start` |
 | `POST /api/v1/sop-runs/{id}/steps/{stepId}/events` | `sopRuns.recordStepEvent` |
 | `POST /api/v1/sop-runs/{id}/steps/{stepId}/measurements` | `sopRuns.recordMeasurement` |
