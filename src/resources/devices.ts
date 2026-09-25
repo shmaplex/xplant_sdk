@@ -52,7 +52,9 @@ export class DevicesResource {
    * Requires the `write:devices` scope.
    *
    * A workspace that has connected every device its plan includes answers
-   * `402 DEVICE_LIMIT_REACHED`.
+   * `402 DEVICE_LIMIT_REACHED`. A `room_id` must be one of your workspace's
+   * rooms; another workspace's answers 404. Safe to retry with an
+   * `Idempotency-Key`: a repeat returns the device already registered.
    *
    * @example
    * const device = await client.devices.register({
@@ -65,7 +67,7 @@ export class DevicesResource {
     const { data } = await this.request<DeviceSummary>(
       "/api/v1/devices",
       { method: "POST", body: JSON.stringify(payload) },
-      options,
+      { ...options, idempotent: true },
     );
     return data;
   }
@@ -145,6 +147,33 @@ export class DevicesResource {
     const { data } = await this.request<DeviceTokenMinted>(
       tokensPath(deviceId),
       { method: "POST", body: JSON.stringify(input) },
+      options,
+    );
+    return data;
+  }
+
+  /**
+   * Revoke one of a device's tokens. The token is refused from its very next
+   * request. Resolves with the token's state afterwards; revoking a token that
+   * is already revoked is not an error and returns the same.
+   * Requires a workspace key with the `write:devices` scope.
+   *
+   * A token id that belongs to another device or workspace answers 404.
+   *
+   * @example
+   * const tokens = await client.devices.listTokens(deviceId);
+   * for (const t of tokens.filter((t) => t.status === "active" && t.name === "old-pi")) {
+   *   await client.devices.revokeToken(deviceId, t.id);
+   * }
+   */
+  async revokeToken(
+    deviceId: string,
+    tokenId: string,
+    options?: WriteOptions,
+  ): Promise<DeviceTokenSummary> {
+    const { data } = await this.request<DeviceTokenSummary>(
+      `${tokensPath(deviceId)}/${encodeURIComponent(tokenId)}`,
+      { method: "DELETE" },
       options,
     );
     return data;

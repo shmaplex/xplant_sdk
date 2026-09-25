@@ -175,6 +175,11 @@ const INVOCATIONS: Invocation[] = [
     call: (c, o) => c.devices.createToken(DEVICE_ID, { name: "shelf-3" }, o),
   },
   {
+    name: "devices.revokeToken",
+    expect: "DELETE /api/v1/devices/{deviceId}/tokens/{tokenId}",
+    call: (c, o) => c.devices.revokeToken(DEVICE_ID, "tok1", o),
+  },
+  {
     name: "devices.listTokens",
     expect: "GET /api/v1/devices/{deviceId}/tokens",
     call: (c) => c.devices.listTokens(DEVICE_ID),
@@ -439,6 +444,22 @@ describe("the SDK sends what the routes read", () => {
         { device_id: DEVICE_ID, type: "ph", value: 5.8, unit: "pH", recorded_at: "2026-09-25T00:00:00Z" },
       ],
     });
+  });
+
+  it("returns null for a single reading the API recognised as a duplicate", async () => {
+    // A resent reading (same device, external_id and recorded_at) is stored
+    // once; the repeat answers { ok: true } with no data.
+    const duplicate = (() =>
+      Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 201 }))) as unknown as typeof fetch;
+    const stored = await client({ fetch: duplicate }).sensorReadings.create({
+      device_id: DEVICE_ID,
+      type: "ph",
+      value: 5.8,
+      unit: "pH",
+      recorded_at: "2026-09-25T00:00:00Z",
+      external_id: "gw1-ph-20260925T0000",
+    });
+    expect(stored).toBeNull();
   });
 
   it("refuses an empty or oversized batch before sending it", async () => {

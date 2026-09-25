@@ -56,7 +56,7 @@ export class StagesResource {
     const { data } = await this.request<StageSummary>(
       "/api/v1/stages",
       { method: "POST", body: JSON.stringify(input) },
-      options,
+      { ...options, idempotent: true },
     );
     return data;
   }

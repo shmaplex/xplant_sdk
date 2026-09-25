@@ -343,12 +343,13 @@ describe("retry", () => {
   });
 
   it("does not resend a write the server does not replay after a 503", async () => {
-    // Nothing proves the first attempt did not land.
-    const calls = stubFetch(() => fail(503, "DEVICE_LIMIT_UNAVAILABLE"));
+    // Nothing proves the first attempt did not land, and device events do not
+    // dedupe, so a resend could store the event twice.
+    const calls = stubFetch(() => fail(503, "SERVICE_UNAVAILABLE"));
 
-    await expect(retrying().devices.register({ name: "Shelf 3" })).rejects.toBeInstanceOf(
-      XPlantError,
-    );
+    await expect(
+      retrying().devices.recordEvent({ device_id: "d1", event_type: "alert" }),
+    ).rejects.toBeInstanceOf(XPlantError);
     expect(calls).toHaveLength(1);
   });
 

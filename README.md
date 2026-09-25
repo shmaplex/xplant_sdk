@@ -188,7 +188,7 @@ every scope the key holds, so an integration can check before it starts.
 | `read:labels` | Resolve QR/barcode codes to records | `labels.resolve` |
 | `write:label_scans` | Record label scans | `labels.recordScan` |
 | `read:devices` | List devices and their tokens | `devices.list`, `devices.get`, `devices.listTokens` |
-| `write:devices` | Register devices, send heartbeats, create device tokens | `devices.register`, `devices.heartbeat`, `devices.createToken` |
+| `write:devices` | Register devices, send heartbeats, create and revoke device tokens | `devices.register`, `devices.heartbeat`, `devices.createToken`, `devices.revokeToken` |
 | `write:device_events` | Record device events | `devices.recordEvent` |
 | `read:sensor_readings` | Query sensor readings | `sensorReadings.list` |
 | `write:sensor_readings` | Submit sensor readings | `sensorReadings.create`, `sensorReadings.createBatch` |
@@ -531,6 +531,10 @@ const { token } = await client.devices.createToken(registered.id, { name: "shelf
 // GET /api/v1/devices/{deviceId}/tokens — read:devices. Prefixes and status, never secrets.
 const tokens = await client.devices.listTokens(registered.id);
 
+// DELETE /api/v1/devices/{deviceId}/tokens/{tokenId} — write:devices, workspace key only.
+// Refused from the token's next request; revoking twice is not an error.
+const revoked = await client.devices.revokeToken(registered.id, tokens[0].id);
+
 // POST /api/v1/devices/{deviceId}/heartbeat — device token, or write:devices
 const { received_at } = await client.devices.heartbeat(registered.id);
 
@@ -548,7 +552,8 @@ A workspace that has connected every device its plan includes answers
 ### `client.sensorReadings`
 
 ```typescript
-// POST /api/v1/sensor-readings — device token, or write:sensor_readings
+// POST /api/v1/sensor-readings — device token, or write:sensor_readings.
+// Resolves with the stored reading, or null if it duplicated one already stored.
 await device.sensorReadings.create({
   device_id: "device-uuid",
   type: "temperature",     // temperature | humidity | ph | co2 | light | other
@@ -738,12 +743,10 @@ own `signal` rejects with the signal's reason instead.
 
 `err.code` is `null` when a gateway answered instead of the API.
 
-**For the broad class of failure, branch on `status`.** 401 means fix the
-credential, 403 means the credential is not allowed to do this. Some older
-device and sensor routes do not yet use the standard code for every status —
-for example, answering a validation failure with a `*_FAILED` code — so code
-that must tell "bad key" from "missing scope" should read `status` first and
-`code` for the specifics.
+**For the broad class of failure, branch on `status`; use `code` for the
+specifics.** 401 means fix the credential, 402 means the plan does not include
+it, and 403 means the credential is not allowed to do this. Codes can be added
+over time, and the status class is the part that never changes meaning.
 
 > **Note:** a task ordering change declined by the manual-override rule is a
 > **success, not an error** — nothing throws. Check `result.skipped` on
@@ -816,6 +819,10 @@ These endpoints honour it:
 | Endpoint | SDK method |
 |---|---|
 | `POST /api/v1/tasks` | `tasks.create` |
+| `POST /api/v1/tasks/demand` | `taskDemand.record` |
+| `POST /api/v1/stages` | `stages.advance` |
+| `POST /api/v1/transfers` | `transfers.create` |
+| `POST /api/v1/devices` | `devices.register` |
 | `POST /api/v1/sop-runs` | `sopRuns.start` |
 | `POST /api/v1/sop-runs/{id}/steps/{stepId}/events` | `sopRuns.recordStepEvent` |
 | `POST /api/v1/sop-runs/{id}/steps/{stepId}/measurements` | `sopRuns.recordMeasurement` |
@@ -887,12 +894,12 @@ What a device token gets back when it steps outside its lane:
 | An unknown or revoked token | `401 UNAUTHORIZED` |
 
 `client.devices.listTokens(deviceId)` shows each token's prefix, status and last
-use, so you can tell them apart.
+use, so you can tell them apart. `client.devices.revokeToken(deviceId, tokenId)`
+revokes one: it is refused from its very next request.
 
 **Taking a device out of service in xPlant revokes all of its tokens at once;
-deleting the device removes them.** A `devices.revokeToken()` method, for
-revoking a single token, will follow when the API's revoke endpoint ships. If a
-token is lost, create another.
+deleting the device removes them.** If a token is lost or may be exposed,
+revoke it and create another.
 
 ---
 

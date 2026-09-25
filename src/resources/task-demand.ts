@@ -60,7 +60,7 @@ export class TaskDemandResource {
     const { data } = await this.request<DemandSignalSummary>(
       "/api/v1/tasks/demand",
       { method: "POST", body: JSON.stringify(input) },
-      options,
+      { ...options, idempotent: true },
     );
     return data;
   }
