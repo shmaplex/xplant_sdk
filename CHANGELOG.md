@@ -13,7 +13,76 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.2.0] — 2026-08-06
+## [0.3.0] — Unreleased
+
+Covers the whole `/api/v1` surface — all 34 route and method pairs — and adds
+device tokens, opt-in retries, idempotency keys and a paging helper. Pre-1.0.
+
+0.2.0 was never published to npm, so **upgrading from 0.1.0 means taking both
+this entry and the 0.2.0 entry below.** The changes most likely to touch
+existing code are the envelope unwrapping and the new default host.
+
+### Fixed
+- **Default host is now `https://app.xplantpro.com`.** 0.2.0 set it to
+  `https://www.xplantpro.com`, which is the marketing site and answers `401` to
+  every `/api/*` path, even with a valid key. The key-creation link in errors
+  and docs now points at `https://app.xplantpro.com/settings/integrations/api-keys`.
+- `LabelResolveResult.record_type` can be `"container"`, with the cultures at
+  that location in `contents`.
+- `TaskSummary` gained `entity_link`, the plant or explant a task is about.
+
+### Added
+- **Every endpoint has a method.** New resources: `client.me`,
+  `client.workspaces`, `client.explants`, `client.stages`, `client.transfers`,
+  `client.events`, `client.taskDemand`, `client.sops`, `client.sopRuns` and
+  `client.equipment`. New methods: `plants.findByExternalId()`,
+  `explants.findByExternalId()`, `labels.recordScan()`, `devices.recordEvent()`,
+  `devices.createToken()`, `devices.listTokens()` and
+  `sensorReadings.createBatch()` (up to 500 readings per request).
+- **Device tokens.** `new XPlantClient({ deviceToken })` for a device that
+  should carry only its own credential. It throws when given anything but an
+  `xpd_` token, so a workspace key cannot end up on a device by mistake.
+- **Opt-in retry** (`retry: true`, or `{ maxRetries, baseDelayMs, maxDelayMs }`).
+  `429` and `409 IDEMPOTENCY_IN_FLIGHT` are retried after `Retry-After` on any
+  method. Network errors and `502`/`503`/`504` are retried for reads and for
+  writes to endpoints that replay an `Idempotency-Key` — never for a write that
+  might run twice.
+- **`Idempotency-Key`.** Every write method takes `{ idempotencyKey }`. With
+  retry on, the SDK generates one per call and reuses it across attempts.
+- `XPlantError.retryAfter` (seconds, from `Retry-After`) and an
+  `XPlantErrorCode` type listing the codes the API is known to return.
+- `paginate()` — an async iterator over any `limit`/`offset` list, plus
+  `MAX_PAGE_SIZE`.
+- Every method takes a trailing options object with an `AbortSignal`, which
+  also cancels a retry wait.
+- `fetch` config option, for a custom or instrumented `fetch`.
+- Task writes accept `is_all_day`, `genus`, `entity_type`/`entity_id`, and
+  `clear_entity_link` on update. `plants.list()` accepts `external_id`.
+- `SensorReadingPayload.external_id`, so a resent batch is not stored twice.
+- `XPlantScope`, `API_KEYS_URL`, `MAX_SENSOR_BATCH`, and types for every new
+  request and response.
+
+### Changed
+- `XPlantClientConfig.apiKey` is optional in the type, because `deviceToken`
+  is the alternative. One of the two is still required at runtime.
+- `EnvelopeRequestFn` takes an optional third `CallOptions` argument. A resource
+  constructed directly with a two-argument function keeps working.
+- `client.request()` and `client.requestEnvelope()` take the same optional
+  `CallOptions`.
+- The vendored `src/testing/v1-surface.json` now records, per endpoint, which
+  credentials it accepts and whether it replays an `Idempotency-Key`. The
+  contract tests read both, check coverage in both directions, and check
+  retry and device-token behaviour against them. The test fake now prefers a
+  static route over a parameterised sibling, as the real router does.
+- `npm run lint` works again: added an ESLint 9 flat config, and CI runs lint.
+- The repository moved to [shmaplex/xplant_sdk](https://github.com/shmaplex/xplant_sdk).
+  The package name is unchanged.
+
+## [0.2.0] — 2026-08-06 — not published
+
+> **Never published to npm.** Everything below first ships in 0.3.0, with one
+> correction: the default host is `https://app.xplantpro.com`, not the `www`
+> host this entry names.
 
 Corrective release. Every change below fixes behaviour that never matched the
 running API. Pre-1.0.
@@ -36,7 +105,7 @@ running API. Pre-1.0.
   deprecated but still mapped across, so existing firmware keeps working.
 - `devices.get()` called a route that does not exist and always 404'd. It now
   resolves against the device list.
-- Types hand-aligned against `lib/api/v1/serializers.ts`: `PlantSummary`
+- Types hand-aligned against the API's response serializers: `PlantSummary`
   (`workspace_id` is nullable for a solo workspace, `species` is always present,
   `created_at` is nullable), `SensorReading`, `DeviceSummary`, `DeviceEvent`,
   `HeartbeatResponse` (returns `received_at`), and `LabelResolveResult`

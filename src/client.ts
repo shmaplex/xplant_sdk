@@ -1,14 +1,56 @@
-import { SensorReadingsResource } from "./resources/sensor-readings.js";
+import { XPlantError, parseRetryAfter, readFailure } from "./errors.js";
+import {
+  networkRetryDelay,
+  newIdempotencyKey,
+  resolveRetry,
+  responseRetryDelay,
+  sleep,
+  type ResolvedRetry,
+  type RetryOptions,
+} from "./retry.js";
 import { DevicesResource } from "./resources/devices.js";
-import { PlantsResource } from "./resources/plants.js";
-import { TasksResource } from "./resources/tasks.js";
+import { EquipmentResource } from "./resources/equipment.js";
+import { EventsResource } from "./resources/events.js";
+import { ExplantsResource } from "./resources/explants.js";
 import { LabelsResource } from "./resources/labels.js";
-import type { XPlantApiResponse } from "./types.js";
+import { MeResource } from "./resources/me.js";
+import { PlantsResource } from "./resources/plants.js";
+import { SensorReadingsResource } from "./resources/sensor-readings.js";
+import { SopRunsResource } from "./resources/sop-runs.js";
+import { SopsResource } from "./resources/sops.js";
+import { StagesResource } from "./resources/stages.js";
+import { TaskDemandResource } from "./resources/task-demand.js";
+import { TasksResource } from "./resources/tasks.js";
+import { TransfersResource } from "./resources/transfers.js";
+import { WorkspacesResource } from "./resources/workspaces.js";
+import type { WriteOptions, XPlantApiResponse } from "./types.js";
 
-/** Production API host. Override with `baseUrl` only to point at a dev server. */
-export const DEFAULT_BASE_URL = "https://www.xplantpro.com";
+export { XPlantError } from "./errors.js";
 
-const API_KEYS_URL = "https://www.xplantpro.com/settings/integrations";
+/**
+ * The API host. `www.xplantpro.com` is the marketing site and answers 401 for
+ * every `/api/*` path; the API and the app live here.
+ */
+export const DEFAULT_BASE_URL = "https://app.xplantpro.com";
+
+/** Where API keys are created and managed. */
+export const API_KEYS_URL = "https://app.xplantpro.com/settings/integrations/api-keys";
+
+const DEVICE_TOKEN_PREFIX = "xpd_";
+
+/**
+ * Options for a single request. Resources set `idempotent` on endpoints that
+ * replay a repeated `Idempotency-Key`; it is exported for callers of
+ * `requestEnvelope()` who reach such an endpoint directly.
+ */
+export interface CallOptions extends WriteOptions {
+  /**
+   * The endpoint answers a repeated `Idempotency-Key` with the stored result,
+   * so the request may be resent after a network failure without running
+   * twice. Leave unset for endpoints that ignore the header.
+   */
+  idempotent?: boolean;
+}
 
 /**
  * The shared request function passed to each resource. Returns the full
@@ -16,7 +58,8 @@ const API_KEYS_URL = "https://www.xplantpro.com/settings/integrations";
  */
 export type EnvelopeRequestFn = <T>(
   path: string,
-  options?: RequestInit,
+  init?: RequestInit,
+  options?: CallOptions,
 ) => Promise<XPlantApiResponse<T>>;
 
 /**
@@ -27,69 +70,97 @@ export type RequestFn = <T>(path: string, options?: RequestInit) => Promise<T>;
 
 export interface XPlantClientConfig {
   /**
-   * Your xPlant API key (xpk_live_... or xpk_dev_...).
-   * Create one at https://www.xplantpro.com/settings/integrations
+   * A workspace API key (`xpk_live_…` or `xpk_dev_…`). Create one at
+   * https://app.xplantpro.com/settings/integrations/api-keys
    *
-   * Note: keep this out of version control. Use environment variables:
-   *   const client = new XPlantClient({ apiKey: process.env.XPLANT_API_KEY! });
+   * Keep it out of version control — read it from the environment:
+   *   new XPlantClient({ apiKey: process.env.XPLANT_API_KEY })
+   *
+   * A workspace key can read and write the whole workspace, so it does not
+   * belong on a device in a shared room. Give a device a `deviceToken` instead.
    */
-  apiKey: string;
+  apiKey?: string;
   /**
-   * Override the base URL. Defaults to https://www.xplantpro.com.
-   * Useful for pointing at a local dev server during testing.
+   * A device token (`xpd_live_…` or `xpd_dev_…`), bound to one device. It can
+   * post that device's sensor readings, events and heartbeat, and nothing else.
+   * Create one with `client.devices.createToken()` using a workspace key.
+   *
+   * Pass either `apiKey` or `deviceToken`, not both.
+   */
+  deviceToken?: string;
+  /**
+   * Override the API host. Defaults to https://app.xplantpro.com. Set this only
+   * to point at a development server.
    */
   baseUrl?: string;
+  /**
+   * Retry rate-limited and transiently failed requests. Off by default.
+   *
+   * - `429` and `409 IDEMPOTENCY_IN_FLIGHT` are retried on any method after the
+   *   `Retry-After` wait — the API refused them before doing any work.
+   * - Network errors and `502`/`503`/`504` are retried for reads, and for
+   *   writes to endpoints that replay a repeated `Idempotency-Key`.
+   *
+   * While retry is on, every write carries an `Idempotency-Key`: yours if you
+   * pass one, otherwise one generated per call and reused across its attempts.
+   */
+  retry?: boolean | RetryOptions;
+  /** A `fetch` implementation to use instead of the global one. */
+  fetch?: typeof fetch;
 }
 
-/**
- * Error thrown when the xPlant API returns a failure.
- *
- * Branch on {@link XPlantError.code}, which is stable. The `message` text is
- * human-readable and may be reworded between releases.
- */
-export class XPlantError extends Error {
-  readonly status: number;
-  /** The raw response body, as text. */
-  readonly body: string;
-  /** Stable machine-readable code, e.g. `FORBIDDEN` or `VALIDATION_ERROR`. */
-  readonly code: string | null;
-
-  constructor(status: number, body: string, code: string | null = null, detail?: string) {
-    const suffix = code ? ` (${code})` : "";
-    super(`xPlant API error ${status}${suffix}: ${detail ?? body}`);
-    this.name = "XPlantError";
-    this.status = status;
-    this.body = body;
-    this.code = code;
+function headerRecord(headers: HeadersInit | undefined): Record<string, string> {
+  if (!headers) return {};
+  if (typeof Headers !== "undefined" && headers instanceof Headers) {
+    const record: Record<string, string> = {};
+    headers.forEach((value, key) => {
+      record[key] = value;
+    });
+    return record;
   }
+  if (Array.isArray(headers)) return Object.fromEntries(headers);
+  return { ...(headers as Record<string, string>) };
 }
 
-/** Pulls `error` and `code` out of a failure body without trusting its shape. */
-function readFailure(text: string): { error?: string; code?: string } {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (parsed === null || typeof parsed !== "object") return {};
-    const { error, code } = parsed as { error?: unknown; code?: unknown };
-    return {
-      error: typeof error === "string" && error.length > 0 ? error : undefined,
-      code: typeof code === "string" && code.length > 0 ? code : undefined,
-    };
-  } catch {
-    // Not JSON — an edge proxy or gateway answered instead of the app.
-    return {};
-  }
+function readHeader(res: Response, name: string): string | null {
+  // Tolerates a minimal fetch polyfill whose responses carry no `headers`.
+  return typeof res.headers?.get === "function" ? res.headers.get(name) : null;
 }
 
 export class XPlantClient {
   private readonly baseUrl: string;
-  private readonly apiKey: string;
+  private readonly credential: string;
+  private readonly retry: ResolvedRetry | null;
+  private readonly fetchImpl: (input: string, init: RequestInit) => Promise<Response>;
 
   constructor(config: XPlantClientConfig) {
-    if (!config.apiKey) {
-      throw new Error(`XPlantClient: apiKey is required. Create one at ${API_KEYS_URL}`);
+    const { apiKey, deviceToken } = config;
+    if (apiKey && deviceToken) {
+      throw new Error("XPlantClient: pass apiKey or deviceToken, not both");
     }
-    this.apiKey = config.apiKey;
+    if (deviceToken !== undefined) {
+      if (!deviceToken.startsWith(DEVICE_TOKEN_PREFIX)) {
+        throw new Error(
+          "XPlantClient: deviceToken must be a device token (xpd_…). Never put a workspace API key on a device — create a device token with client.devices.createToken() and use that.",
+        );
+      }
+      this.credential = deviceToken;
+    } else if (apiKey) {
+      this.credential = apiKey;
+    } else {
+      throw new Error(
+        `XPlantClient: apiKey is required (or deviceToken, on a device). Create a key at ${API_KEYS_URL}`,
+      );
+    }
+
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
+    this.retry = resolveRetry(config.retry);
+    const custom = config.fetch;
+    // Resolved per call, and never called as a method of the config object:
+    // browsers reject `fetch` invoked with a `this` that is not the window.
+    this.fetchImpl = custom
+      ? (input, init) => custom(input, init)
+      : (input, init) => globalThis.fetch(input, init);
   }
 
   /**
@@ -98,27 +169,73 @@ export class XPlantClient {
    *
    * Throws {@link XPlantError} on any non-2xx response, and on a 2xx body that
    * reports a failure — so an error envelope never arrives disguised as data.
+   * A network failure rejects with the error `fetch` raised.
    */
   async requestEnvelope<T>(
     path: string,
-    options: RequestInit = {},
+    init: RequestInit = {},
+    options: CallOptions = {},
   ): Promise<XPlantApiResponse<T>> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
+    const method = (init.method ?? "GET").toUpperCase();
+    const isRead = method === "GET" || method === "HEAD";
+    const idempotencyKey = isRead
+      ? undefined
+      : (options.idempotencyKey ?? (this.retry ? newIdempotencyKey() : undefined));
+    const signal = options.signal ?? init.signal ?? undefined;
+    // Safe to resend after an answer that never arrived: a read, or a write the
+    // server would recognise as the same one and answer from its record.
+    const resendable = isRead || (options.idempotent === true && idempotencyKey !== undefined);
+
+    const request: RequestInit = {
+      ...init,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
-        ...(options.headers ?? {}),
+        Authorization: `Bearer ${this.credential}`,
+        ...(idempotencyKey !== undefined ? { "Idempotency-Key": idempotencyKey } : {}),
+        ...headerRecord(init.headers),
       },
-    });
+      ...(signal ? { signal } : {}),
+    };
+    const url = `${this.baseUrl}${path}`;
 
-    const text = await res.text();
+    for (let attempt = 0; ; attempt++) {
+      let res: Response;
+      try {
+        res = await this.fetchImpl(url, request);
+      } catch (err) {
+        const delay =
+          this.retry && !signal?.aborted
+            ? networkRetryDelay(this.retry, attempt, resendable)
+            : null;
+        if (delay === null) throw err;
+        await sleep(delay, signal);
+        continue;
+      }
 
-    if (!res.ok) {
-      const { error, code } = readFailure(text);
-      throw new XPlantError(res.status, text, code ?? null, error);
+      const text = await res.text();
+
+      if (!res.ok) {
+        const { error, code } = readFailure(text);
+        const failure = new XPlantError(
+          res.status,
+          text,
+          code ?? null,
+          error,
+          parseRetryAfter(readHeader(res, "Retry-After")),
+        );
+        const delay = this.retry
+          ? responseRetryDelay(this.retry, attempt, failure, resendable)
+          : null;
+        if (delay === null) throw failure;
+        await sleep(delay, signal);
+        continue;
+      }
+
+      return this.readSuccess<T>(res.status, text);
     }
+  }
 
+  private readSuccess<T>(status: number, text: string): XPlantApiResponse<T> {
     if (text.length === 0) {
       return { ok: true, data: undefined as T };
     }
@@ -127,16 +244,11 @@ export class XPlantClient {
     try {
       envelope = JSON.parse(text);
     } catch {
-      throw new XPlantError(res.status, text, "INVALID_RESPONSE", "Response body was not JSON");
+      throw new XPlantError(status, text, "INVALID_RESPONSE", "Response body was not JSON");
     }
 
     if (envelope === null || typeof envelope !== "object") {
-      throw new XPlantError(
-        res.status,
-        text,
-        "INVALID_RESPONSE",
-        "Response body was not an object",
-      );
+      throw new XPlantError(status, text, "INVALID_RESPONSE", "Response body was not an object");
     }
 
     const result = envelope as XPlantApiResponse<T>;
@@ -144,7 +256,7 @@ export class XPlantClient {
     // A 2xx carrying a failure envelope is still a failure.
     if (result.ok === false || (typeof result.error === "string" && result.error.length > 0)) {
       const { error, code } = readFailure(text);
-      throw new XPlantError(res.status, text, code ?? null, error);
+      throw new XPlantError(status, text, code ?? null, error);
     }
 
     return result;
@@ -156,33 +268,87 @@ export class XPlantClient {
    * Every `/api/v1` route wraps its payload in `{ ok, data }`; this hands back
    * the records themselves.
    */
-  async request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const { data } = await this.requestEnvelope<T>(path, options);
+  async request<T>(path: string, init: RequestInit = {}, options: CallOptions = {}): Promise<T> {
+    const { data } = await this.requestEnvelope<T>(path, init, options);
     return data;
   }
 
-  /** Submit environmental sensor readings (temperature, humidity, CO2, light, etc.) */
-  get sensorReadings(): SensorReadingsResource {
-    return new SensorReadingsResource(this.requestEnvelope.bind(this));
+  private get send(): EnvelopeRequestFn {
+    return this.requestEnvelope.bind(this);
   }
 
-  /** Register devices, send heartbeats, and retrieve device metadata */
-  get devices(): DevicesResource {
-    return new DevicesResource(this.requestEnvelope.bind(this));
+  /** The key's own identity, scopes and workspace — needs no scope */
+  get me(): MeResource {
+    return new MeResource(this.send);
+  }
+
+  /** The workspace this key acts in — requires the `read:workspace` scope */
+  get workspaces(): WorkspacesResource {
+    return new WorkspacesResource(this.send);
   }
 
   /** Read plant summaries — requires the `read:plants` scope */
   get plants(): PlantsResource {
-    return new PlantsResource(this.requestEnvelope.bind(this));
+    return new PlantsResource(this.send);
   }
 
-  /** Read and write tasks — requires `read:tasks` / `write:tasks` scopes */
+  /** Read explant (batch) summaries — requires the `read:explants` scope */
+  get explants(): ExplantsResource {
+    return new ExplantsResource(this.send);
+  }
+
+  /** Read and advance tissue-culture stages — requires `read:transfers` / `write:transfers` */
+  get stages(): StagesResource {
+    return new StagesResource(this.send);
+  }
+
+  /** Read and record transfers — requires `read:transfers` / `write:transfers` */
+  get transfers(): TransfersResource {
+    return new TransfersResource(this.send);
+  }
+
+  /** Read plant and explant change history — requires the `read:events` scope */
+  get events(): EventsResource {
+    return new EventsResource(this.send);
+  }
+
+  /** Read and write tasks — requires `read:tasks` / `write:tasks` */
   get tasks(): TasksResource {
-    return new TasksResource(this.requestEnvelope.bind(this));
+    return new TasksResource(this.send);
   }
 
-  /** Resolve QR/barcode label codes to xPlant records — requires the `read:labels` scope */
+  /** Read and push demand signals — requires `read:tasks` / `write:demand` */
+  get taskDemand(): TaskDemandResource {
+    return new TaskDemandResource(this.send);
+  }
+
+  /** Read protocols and the version in force — requires the `read:sops` scope */
+  get sops(): SopsResource {
+    return new SopsResource(this.send);
+  }
+
+  /** Start SOP runs and post step evidence — requires `read:sop_runs` / `write:sop_runs` / `write:sop_steps` */
+  get sopRuns(): SopRunsResource {
+    return new SopRunsResource(this.send);
+  }
+
+  /** Resolve label codes and record scans — requires `read:labels` / `write:label_scans` */
   get labels(): LabelsResource {
-    return new LabelsResource(this.requestEnvelope.bind(this));
+    return new LabelsResource(this.send);
+  }
+
+  /** Register devices, send heartbeats, record events and manage device tokens */
+  get devices(): DevicesResource {
+    return new DevicesResource(this.send);
+  }
+
+  /** Post and read environmental sensor readings */
+  get sensorReadings(): SensorReadingsResource {
+    return new SensorReadingsResource(this.send);
+  }
+
+  /** Record equipment use and maintenance — requires the `write:equipment_events` scope */
+  get equipment(): EquipmentResource {
+    return new EquipmentResource(this.send);
   }
 }
