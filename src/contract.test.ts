@@ -114,7 +114,8 @@ const INVOCATIONS: Invocation[] = [
   {
     name: "tasks.create",
     expect: "POST /api/v1/tasks",
-    call: (c, o) => c.tasks.create({ title: "Subculture B-2026-114" }, o),
+    call: (c, o) =>
+      c.tasks.create({ title: "Subculture B-2026-114", category: "other", category_label: "Grafting" }, o),
   },
   {
     name: "tasks.update",

@@ -15,6 +15,7 @@ const task = (overrides: Partial<TaskSummary> = {}): TaskSummary => ({
   priority_rank: 3000,
   priority_source: "default",
   category: "transfer",
+  category_label: null,
   created_at: "2026-08-06T00:00:00.000Z",
   ...overrides,
 });

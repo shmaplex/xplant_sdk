@@ -538,6 +538,8 @@ export interface TaskSummary {
   priority_rank: number | null;
   priority_source: PrioritySource | (string & {});
   category: string | null;
+  /** The lab's own name for a custom category, beside `category: "other"`. `null` when there is none. */
+  category_label: string | null;
   created_at: string | null;
   /**
    * The plant or explant this task is about. Returned by `get()`, `update()`,
@@ -563,8 +565,18 @@ export interface TaskCreateInput {
   due_date?: string;
   /** `true` when only the due date matters, not the time. */
   is_all_day?: boolean;
-  /** Defaults to `"media_prep"`. */
+  /**
+   * Defaults to `"media_prep"`. For a category of your own, send `"other"`
+   * with a `category_label`. A value outside these presets answers
+   * `422 VALIDATION_ERROR`, naming the field.
+   */
   category?: TaskCategory;
+  /**
+   * Your own name for the category, 1–60 characters — allowed only beside
+   * `category: "other"`, in the same request; with any other category it
+   * answers `422 VALIDATION_ERROR`. `null` clears it on update.
+   */
+  category_label?: string | null;
   /** Up to 5000 characters. */
   notes?: string;
   priority?: TaskPriority;

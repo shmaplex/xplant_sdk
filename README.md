@@ -452,6 +452,7 @@ const created = await client.tasks.create({
   title: "Subculture B-2026-114 — second pass",
   category: "transfer",        // media_prep | transfer | contamination | subculture
                                // | sop_review | acclimation | cleaning | monitoring | other
+                               // (a custom one: category "other" + category_label)
   priority: "high",            // low | medium | high | urgent
   workflow_status: "todo",     // backlog | todo | in_progress | waiting_blocked | review | done
   due_date: "2026-10-01T09:00:00+09:00", // ISO 8601 with an offset
@@ -505,6 +506,12 @@ await client.tasks.update(taskId, { priority_rank: 1500, release: true });
 `default` (never positioned), `auto` (set by an integration), or `manual` (set
 by a person). `priority_write` is `null` when the request attempted no ordering
 change. To remove a task's culture link, send `clear_entity_link: true`.
+
+For a category of your own, send `category: "other"` with a `category_label`
+(1–60 characters), e.g. `{ category: "other", category_label: "Grafting" }`.
+The label comes back on every task as `category_label`. A category outside the
+nine presets, a label beside any category but `"other"`, or a blank or
+over-long label answers `422 VALIDATION_ERROR`, and the message names the field.
 
 ### `client.taskDemand` — demand signals
 
