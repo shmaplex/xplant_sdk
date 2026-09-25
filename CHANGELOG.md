@@ -22,8 +22,9 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A category of your own is `category: "other"` plus a `category_label` of
     1–60 characters. The label is allowed only beside `"other"`, and `null`
     clears it.
-  - A category outside the nine presets answers the new
-    `400 TASK_CATEGORY_INVALID` code.
+  - A category outside the nine presets, a label beside any other category,
+    or a blank or over-long label answers `422 VALIDATION_ERROR`, naming the
+    field.
 
 ## [0.6.1] — 2026-09-25
 

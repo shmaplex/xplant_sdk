@@ -509,8 +509,9 @@ change. To remove a task's culture link, send `clear_entity_link: true`.
 
 For a category of your own, send `category: "other"` with a `category_label`
 (1–60 characters), e.g. `{ category: "other", category_label: "Grafting" }`.
-The label comes back on every task as `category_label`. Any other value outside
-the nine presets answers `400 TASK_CATEGORY_INVALID`.
+The label comes back on every task as `category_label`. A category outside the
+nine presets, a label beside any category but `"other"`, or a blank or
+over-long label answers `422 VALIDATION_ERROR`, and the message names the field.
 
 ### `client.taskDemand` — demand signals
 
@@ -987,7 +988,6 @@ own `signal` rejects with the signal's reason instead.
 | Status | `code` | Meaning |
 |---|---|---|
 | 400, 422 | `VALIDATION_ERROR` | The request failed validation; the message names the field |
-| 400 | `TASK_CATEGORY_INVALID` | The task category isn't a preset; use `"other"` with a `category_label` |
 | 401 | `UNAUTHORIZED` | No key, an unknown or revoked key or device token, or the key's owner left the workspace |
 | 402 | `PAID_PLAN_REQUIRED` | The plan doesn't include this part of the API — see [Plans and access](#plans-and-access) |
 | 402 | `FEATURE_NOT_INCLUDED` | The plan doesn't include this feature (e.g. pricing, calibration history) |

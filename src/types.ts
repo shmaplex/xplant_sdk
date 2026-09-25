@@ -568,12 +568,13 @@ export interface TaskCreateInput {
   /**
    * Defaults to `"media_prep"`. For a category of your own, send `"other"`
    * with a `category_label`. A value outside these presets answers
-   * `400 TASK_CATEGORY_INVALID`.
+   * `422 VALIDATION_ERROR`, naming the field.
    */
   category?: TaskCategory;
   /**
    * Your own name for the category, 1–60 characters — allowed only beside
-   * `category: "other"`. `null` clears it on update.
+   * `category: "other"`, in the same request; with any other category it
+   * answers `422 VALIDATION_ERROR`. `null` clears it on update.
    */
   category_label?: string | null;
   /** Up to 5000 characters. */
