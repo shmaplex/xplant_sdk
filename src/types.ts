@@ -746,6 +746,30 @@ export interface SopRunDetail extends SopRun {
   events: SopStepEvent[];
 }
 
+/**
+ * Where the key owner's training on an SOP stands, sent when the lab enforces
+ * training as a warning or when training lapses within 30 days.
+ */
+export interface TrainingWarning {
+  /**
+   * `untrained` — no training recorded; `expired` — it has lapsed; `revoked` —
+   * it was withdrawn; `expiring` — current, but lapses within 30 days.
+   */
+  qualification: "untrained" | "expired" | "revoked" | "expiring" | (string & {});
+  /** `YYYY-MM-DD` for `expired` and `expiring`; `null` otherwise. */
+  expires_on: string | null;
+}
+
+/** Returned by `sopRuns.start()`: the run, plus any training warning. */
+export interface SopRunStarted extends SopRun {
+  /**
+   * Set when the lab warns rather than blocks on training, or the owner's
+   * training lapses within 30 days — `null` otherwise. Added by the SDK from
+   * the response's `meta`; show it to the operator.
+   */
+  trainingWarning: TrainingWarning | null;
+}
+
 /** Payload sent when starting a run. The effective version is always pinned. */
 export interface SopRunStartInput {
   sop_id: string;

@@ -16,6 +16,13 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.6.1] — 2026-09-25
 
 ### Added
+- **Training on SOP runs:**
+  - `sopRuns.start()` resolves to a `SopRunStarted`: the run, plus
+    `trainingWarning` (`{ qualification, expires_on }` or `null`) when the lab
+    warns on training or the owner's training lapses within 30 days.
+  - The new `TRAINING_REQUIRED` code (403) means the lab blocks untrained
+    operators.
+  - `SopRunStarted` extends `SopRun`, so existing code is unaffected.
 - `TransferCreateInput.status`: `"completed"` (the default) or `"pending"`, for
   a transfer that is planned but not done. It comes with a `TransferStatus`
   type. New transfers read `"completed"` where they used to read `"active"`.

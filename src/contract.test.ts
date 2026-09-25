@@ -588,6 +588,25 @@ describe("the SDK sends what the routes read", () => {
     expect(server.calls[0].body).toMatchObject({ external_id: "shelf-3-alert-0142" });
   });
 
+  it("hands back sopRuns.start()'s training warning, and null without one", async () => {
+    const answer = (meta?: unknown) =>
+      (() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ ok: true, data: { id: "run1" }, ...(meta ? { meta } : {}) }), {
+            status: 201,
+          }),
+        )) as unknown as typeof fetch;
+
+    const warned = await client({
+      fetch: answer({ training_warning: { qualification: "expiring", expires_on: "2026-10-20" } }),
+    }).sopRuns.start({ sop_id: "s1" });
+    expect(warned.id).toBe("run1");
+    expect(warned.trainingWarning).toEqual({ qualification: "expiring", expires_on: "2026-10-20" });
+
+    const plain = await client({ fetch: answer() }).sopRuns.start({ sop_id: "s1" });
+    expect(plain.trainingWarning).toBeNull();
+  });
+
   it("hands back plants.create()'s warning when the first stage could not be set", async () => {
     const partly = (() =>
       Promise.resolve(

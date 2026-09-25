@@ -547,6 +547,10 @@ approved version that has not taken effect. It is `null` when there is none.
 ```typescript
 // POST /api/v1/sop-runs — write:sop_runs. Always pinned to the version in force.
 const run = await client.sopRuns.start({ sop_id: "sop-uuid", batch_code: "B-2026-114" });
+if (run.trainingWarning) {
+  // untrained | expired | revoked | expiring — show it to the operator
+  console.warn("Training", run.trainingWarning.qualification, run.trainingWarning.expires_on);
+}
 
 // POST /api/v1/sop-runs/{id}/steps/{stepId}/events — write:sop_steps
 await client.sopRuns.recordStepEvent(run.id, "step-3", {
@@ -564,6 +568,11 @@ await client.sopRuns.recordMeasurement(run.id, "step-4", {
 // GET /api/v1/sop-runs/{id} — read:sop_runs. Step states and evidence, oldest first.
 const detail = await client.sopRuns.get(run.id);
 ```
+
+If the lab requires training on an SOP, `start()` answers
+`403 TRAINING_REQUIRED` when the key's owner isn't currently trained. If the
+lab only warns — or the owner's training lapses within 30 days — the run starts
+and `run.trainingWarning` says why.
 
 Evidence is append-only. A protocol with no version in force answers
 `409 SOP_RUN_NOT_EFFECTIVE`. A run that has ended (completed, failed,
@@ -979,6 +988,7 @@ own `signal` rejects with the signal's reason instead.
 | 403 | `FORBIDDEN` | The key lacks the scope, or its owner's role can't use it; the message names which |
 | 403 | `PLANT_WRITE_FORBIDDEN`, `EXPLANT_WRITE_FORBIDDEN` | Editing a teammate's record needs its creator or a manager |
 | 403 | `MEDIA_RECIPE_NOT_OWNER` | Only a recipe's author can edit it |
+| 403 | `TRAINING_REQUIRED` | The lab requires training on this SOP, and the key's owner isn't currently trained |
 | 403 | `DEVICE_TOKEN_NOT_ACCEPTED` | A device token was sent to an endpoint that needs a workspace key |
 | 403 | `DEVICE_TOKEN_WRONG_DEVICE` | A device token tried to write about another device |
 | 404 | `NOT_FOUND` | Not found, in another workspace, or a malformed id; the API does not distinguish |

@@ -90,6 +90,8 @@ export type {
   SopEffectiveVersion,
   SopDetail,
   SopRun,
+  SopRunStarted,
+  TrainingWarning,
   SopRunDetail,
   SopRunStartInput,
   SopStepEvent,

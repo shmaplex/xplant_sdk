@@ -28,6 +28,8 @@ export type XPlantErrorCode =
   | "INVALID_CURSOR"
   /** 409 — the SOP has no version in force, so it cannot be run. */
   | "SOP_RUN_NOT_EFFECTIVE"
+  /** 403 — the lab requires training on this SOP, and the key's owner isn't currently trained. */
+  | "TRAINING_REQUIRED"
   /** 409 — the run has ended (completed, failed, cancelled or archived) and takes no more evidence. */
   | "SOP_RUN_CLOSED"
   /** 409 — a device in the batch is paused or retired. */
