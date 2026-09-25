@@ -8,9 +8,9 @@
 export type XPlantErrorCode =
   /** 401 — no key, an unknown or revoked key, or a key whose owner left the workspace. */
   | "UNAUTHORIZED"
-  /** 403 — the key is valid but lacks the scope. The message names the scope. */
+  /** 403 — the key lacks the scope, or its owner's role cannot use it. The message names which. */
   | "FORBIDDEN"
-  /** 402 — the API requires a paid workspace. */
+  /** 402 — the workspace's plan does not include this part of the API. */
   | "PAID_PLAN_REQUIRED"
   /** 429 — a per-key or per-workspace budget is spent. See `retryAfter`. */
   | "RATE_LIMIT_EXCEEDED"

@@ -39,6 +39,7 @@ export type {
   PageParams,
   ApiKeyInfo,
   MeResponse,
+  WorkspaceRole,
   Workspace,
   PlantSummary,
   PlantListParams,

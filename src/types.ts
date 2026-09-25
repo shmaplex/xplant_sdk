@@ -138,11 +138,35 @@ export interface ApiKeyInfo {
   createdAt: string;
 }
 
+/** A member's role in a workspace, from most to least access. */
+export type WorkspaceRole =
+  | "owner"
+  | "admin"
+  | "manager"
+  | "member"
+  | "viewer"
+  | "guest"
+  | (string & {});
+
 /** Returned by `me.get()`: what this key is, and what it may do. */
 export interface MeResponse {
   key: ApiKeyInfo;
-  /** Every scope this key holds, so you can check before you call. */
+  /** Every scope the key was created with. */
   scopes: XPlantScope[];
+  /**
+   * The scopes this key can use right now: its own scopes, narrowed by its
+   * owner's current role and the workspace's plan. Check this one before you
+   * call — a key never does more than its owner can in xPlant.
+   */
+  effectiveScopes: XPlantScope[];
+  /** The key owner's role in the workspace. */
+  role: WorkspaceRole;
+  /**
+   * `"full"` on xPlant+ Teams and Enterprise. `"devices"` on plans whose keys
+   * can connect devices only: registering them, managing their tokens, and
+   * posting their readings and events.
+   */
+  apiAccess: "full" | "devices" | (string & {});
   /** The workspace this key acts in. A key is created in exactly one. */
   workspace: { id: string };
   user: { id: string | null };
