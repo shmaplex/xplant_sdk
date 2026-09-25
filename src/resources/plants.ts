@@ -50,12 +50,12 @@ export class PlantsResource {
   }
 
   /**
-   * Resolve your own plant identifier (e.g. `"N2001"`) to the record it was
+   * Resolve your own plant identifier (e.g. `"LINE-0412"`) to the record it was
    * imported under, or `null` when nothing matches.
    * Requires the `read:plants` scope.
    *
    * @example
-   * const plant = await client.plants.findByExternalId("N2001");
+   * const plant = await client.plants.findByExternalId("LINE-0412");
    */
   async findByExternalId(
     externalId: string,

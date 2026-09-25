@@ -154,8 +154,8 @@ describe("response envelope", () => {
       ok([
         {
           id: "p1",
-          name: "Nepenthes ventricosa",
-          species: "Nepenthes ventricosa",
+          name: "Alocasia zebrina",
+          species: "Alocasia zebrina",
           status: "active",
           workspace_id: null,
           created_at: "2026-08-01T00:00:00.000Z",
@@ -167,18 +167,18 @@ describe("response envelope", () => {
     const plants = await client().plants.list();
 
     expect(Array.isArray(plants)).toBe(true);
-    expect(plants[0].name).toBe("Nepenthes ventricosa");
+    expect(plants[0].name).toBe("Alocasia zebrina");
     // The envelope must not leak through as the value.
     expect(plants).not.toHaveProperty("data");
   });
 
   it("unwraps a wrapped single record", async () => {
-    stubFetch(() => ok({ id: "p1", name: "Sarracenia flava" }));
+    stubFetch(() => ok({ id: "p1", name: "Phalaenopsis amabilis" }));
 
     const plant = await client().plants.get("p1");
 
     expect(plant.id).toBe("p1");
-    expect(plant.name).toBe("Sarracenia flava");
+    expect(plant.name).toBe("Phalaenopsis amabilis");
   });
 
   it("returns the whole envelope from requestEnvelope()", async () => {
@@ -356,7 +356,7 @@ describe("retry", () => {
       attempt === 0 ? fail(503, "SERVICE_UNAVAILABLE") : ok({ id: "t1" }),
     );
 
-    await retrying().tasks.create({ title: "Replate" });
+    await retrying().tasks.create({ title: "Subculture" });
 
     expect(calls).toHaveLength(2);
     expect(headersOf(calls[1].init)["Idempotency-Key"]).toBe(
@@ -369,7 +369,7 @@ describe("retry", () => {
       attempt === 0 ? fail(409, "IDEMPOTENCY_IN_FLIGHT", { "Retry-After": "0" }) : ok({ id: "t1" }),
     );
 
-    await retrying().tasks.create({ title: "Replate" });
+    await retrying().tasks.create({ title: "Subculture" });
     expect(calls).toHaveLength(2);
   });
 
@@ -400,16 +400,16 @@ describe("Idempotency-Key", () => {
   it("sends a caller's key on a write", async () => {
     const calls = stubFetch(() => ok({ id: "t1" }));
     await new XPlantClient({ apiKey: "xpk_live_test" }).tasks.create(
-      { title: "Replate" },
-      { idempotencyKey: "replate-N2001-pass-2" },
+      { title: "Subculture" },
+      { idempotencyKey: "subculture-b-2026-114-pass-2" },
     );
 
-    expect(headersOf(calls[0].init)["Idempotency-Key"]).toBe("replate-N2001-pass-2");
+    expect(headersOf(calls[0].init)["Idempotency-Key"]).toBe("subculture-b-2026-114-pass-2");
   });
 
   it("sends none on a write when retry is off and no key is given", async () => {
     const calls = stubFetch(() => ok({ id: "t1" }));
-    await new XPlantClient({ apiKey: "xpk_live_test" }).tasks.create({ title: "Replate" });
+    await new XPlantClient({ apiKey: "xpk_live_test" }).tasks.create({ title: "Subculture" });
 
     expect(headersOf(calls[0].init)).not.toHaveProperty("Idempotency-Key");
   });

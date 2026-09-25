@@ -28,7 +28,7 @@ export class SopRunsResource {
    * Safe to retry with an `Idempotency-Key`.
    *
    * @example
-   * const run = await client.sopRuns.start({ sop_id: sopId, batch_code: "N2001" });
+   * const run = await client.sopRuns.start({ sop_id: sopId, batch_code: "B-2026-114" });
    */
   async start(input: SopRunStartInput, options?: WriteOptions): Promise<SopRun> {
     const { data } = await this.request<SopRun>(

@@ -158,7 +158,7 @@ export interface PlantSummary {
   workspace_id: string | null;
   created_at: string | null;
   /**
-   * Your own identifier for this plant (e.g. `"N2001"`), verbatim as supplied
+   * Your own identifier for this plant (e.g. `"LINE-0412"`), verbatim as supplied
    * at import — never normalized. `null` when the record was created without
    * one.
    */
@@ -183,7 +183,7 @@ export interface ExplantSummary {
   id: string;
   label: string | null;
   /**
-   * Your own batch identifier (e.g. `"N2001"`), verbatim as supplied at import.
+   * Your own batch identifier (e.g. `"LINE-0412"`), verbatim as supplied at import.
    * Resolved from the batch code, then the batch number, then the label.
    */
   external_id: string | null;

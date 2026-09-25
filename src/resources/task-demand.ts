@@ -20,7 +20,7 @@ export class TaskDemandResource {
    * whether to push a new one.
    *
    * @example
-   * const [current] = await client.taskDemand.list({ genus: "Nepenthes", current: true });
+   * const [current] = await client.taskDemand.list({ genus: "Alocasia", current: true });
    */
   async list(
     params: TaskDemandListParams = {},
@@ -46,7 +46,7 @@ export class TaskDemandResource {
    *
    * @example
    * await client.taskDemand.record({
-   *   genus: "Nepenthes",
+   *   genus: "Alocasia",
    *   demand_score: 42,
    *   source: "web-store",
    * });

@@ -45,7 +45,7 @@ const INVOCATIONS: Invocation[] = [
   {
     name: "plants.findByExternalId",
     expect: "GET /api/v1/plants",
-    call: (c) => c.plants.findByExternalId("N2001"),
+    call: (c) => c.plants.findByExternalId("LINE-0412"),
   },
   {
     name: "explants.list",
@@ -56,7 +56,7 @@ const INVOCATIONS: Invocation[] = [
   {
     name: "explants.findByExternalId",
     expect: "GET /api/v1/explants",
-    call: (c) => c.explants.findByExternalId("N2001"),
+    call: (c) => c.explants.findByExternalId("LINE-0412"),
   },
 
   {
@@ -94,7 +94,7 @@ const INVOCATIONS: Invocation[] = [
   {
     name: "tasks.create",
     expect: "POST /api/v1/tasks",
-    call: (c, o) => c.tasks.create({ title: "Replate N2001" }, o),
+    call: (c, o) => c.tasks.create({ title: "Subculture B-2026-114" }, o),
   },
   {
     name: "tasks.update",
@@ -104,13 +104,13 @@ const INVOCATIONS: Invocation[] = [
   {
     name: "taskDemand.list",
     expect: "GET /api/v1/tasks/demand",
-    call: (c) => c.taskDemand.list({ genus: "Nepenthes" }),
+    call: (c) => c.taskDemand.list({ genus: "Alocasia" }),
   },
   {
     name: "taskDemand.record",
     expect: "POST /api/v1/tasks/demand",
     call: (c, o) =>
-      c.taskDemand.record({ genus: "Nepenthes", demand_score: 10, source: "test" }, o),
+      c.taskDemand.record({ genus: "Alocasia", demand_score: 10, source: "test" }, o),
   },
 
   { name: "sops.list", expect: "GET /api/v1/sops", call: (c) => c.sops.list() },
@@ -118,7 +118,7 @@ const INVOCATIONS: Invocation[] = [
   {
     name: "sopRuns.start",
     expect: "POST /api/v1/sop-runs",
-    call: (c, o) => c.sopRuns.start({ sop_id: "s1", batch_code: "N2001" }, o),
+    call: (c, o) => c.sopRuns.start({ sop_id: "s1", batch_code: "B-2026-114" }, o),
   },
   { name: "sopRuns.get", expect: "GET /api/v1/sop-runs/{id}", call: (c) => c.sopRuns.get("r1") },
   {
@@ -410,10 +410,10 @@ describe("device tokens reach only the endpoints that accept them", () => {
 describe("the SDK sends what the routes read", () => {
   it("looks up an external id with the route's camelCase parameter", async () => {
     const server = fakeXPlant({ responses: { "GET /api/v1/plants": [] } });
-    const found = await client({ fetch: server.fetch }).plants.findByExternalId("N2001");
+    const found = await client({ fetch: server.fetch }).plants.findByExternalId("LINE-0412");
 
     expect(found).toBeNull();
-    expect(server.calls[0].query.get("externalId")).toBe("N2001");
+    expect(server.calls[0].query.get("externalId")).toBe("LINE-0412");
   });
 
   it("wraps a batch of readings in the bulk envelope", async () => {

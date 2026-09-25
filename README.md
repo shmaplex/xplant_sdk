@@ -88,7 +88,7 @@ const plants = await client.plants.list();
 
 // Queue bench work
 await client.tasks.create({
-  title: "Replate N2001 — second pass",
+  title: "Subculture B-2026-114 — second pass",
   category: "transfer",
   priority: "high",
 });
@@ -238,8 +238,8 @@ const plants = await client.plants.list({ limit: 50, offset: 0 });
 // GET /api/v1/plants/{id}
 const plant = await client.plants.get("plant-uuid");
 
-// Resolve your own identifier (e.g. "N2001") — resolves to the plant or null
-const n2001 = await client.plants.findByExternalId("N2001");
+// Resolve your own identifier (e.g. "LINE-0412") — resolves to the plant or null
+const match = await client.plants.findByExternalId("LINE-0412");
 ```
 
 ### `client.explants`
@@ -252,7 +252,7 @@ const batches = await client.explants.list({ limit: 50 });
 const batch = await client.explants.get("explant-uuid");
 
 // Resolve your own batch identifier — resolves to the batch or null
-const n2001 = await client.explants.findByExternalId("N2001");
+const match = await client.explants.findByExternalId("LINE-0412");
 ```
 
 ### `client.stages`
@@ -313,7 +313,7 @@ const task = await client.tasks.get("task-uuid");
 
 // POST /api/v1/tasks — write:tasks
 const created = await client.tasks.create({
-  title: "Replate N2001 — second pass",
+  title: "Subculture B-2026-114 — second pass",
   category: "transfer",        // media_prep | transfer | contamination | subculture
                                // | sop_review | acclimation | cleaning | monitoring | other
   priority: "high",            // low | medium | high | urgent
@@ -321,7 +321,7 @@ const created = await client.tasks.create({
   due_date: "2026-10-01T09:00:00+09:00", // ISO 8601 with an offset
   is_all_day: false,
   assigned_to: userId,         // must be an active member of the key's workspace
-  genus: "Nepenthes",
+  genus: "Alocasia",
   entity_type: "explant",      // link to a culture: send entity_type and entity_id together
   entity_id: "explant-uuid",
 });
@@ -374,15 +374,15 @@ change. To remove a task's culture link, send `clear_entity_link: true`.
 
 ```typescript
 // GET /api/v1/tasks/demand — read:tasks. Newest first.
-const signals = await client.taskDemand.list({ genus: "Nepenthes" });
+const signals = await client.taskDemand.list({ genus: "Alocasia" });
 
 // Just the current reading for one genus
-const [current] = await client.taskDemand.list({ genus: "Nepenthes", current: true });
+const [current] = await client.taskDemand.list({ genus: "Alocasia", current: true });
 
 // POST /api/v1/tasks/demand — write:demand, kept separate from write:tasks so a
 // demand-only integration doesn't also get task writes
 await client.taskDemand.record({
-  genus: "Nepenthes",
+  genus: "Alocasia",
   demand_score: 42,
   source: "web-store",
   source_type: "tissue",                      // optional
@@ -411,7 +411,7 @@ approved version that has not taken effect. It is `null` when there is none.
 
 ```typescript
 // POST /api/v1/sop-runs — write:sop_runs. Always pinned to the version in force.
-const run = await client.sopRuns.start({ sop_id: "sop-uuid", batch_code: "N2001" });
+const run = await client.sopRuns.start({ sop_id: "sop-uuid", batch_code: "B-2026-114" });
 
 // POST /api/v1/sop-runs/{id}/steps/{stepId}/events — write:sop_steps
 await client.sopRuns.recordStepEvent(run.id, "step-3", {
@@ -592,7 +592,7 @@ Every API failure throws an `XPlantError`:
 import { XPlantError } from "@shmaplex/xplant-sdk";
 
 try {
-  await client.tasks.create({ title: "Replate N2001" });
+  await client.tasks.create({ title: "Subculture B-2026-114" });
 } catch (err) {
   if (err instanceof XPlantError) {
     err.status;     // HTTP status
@@ -698,8 +698,8 @@ Pass a key on any write:
 
 ```typescript
 await client.tasks.create(
-  { title: "Replate N2001 — second pass" },
-  { idempotencyKey: "replate-N2001-pass-2" },
+  { title: "Subculture B-2026-114 — second pass" },
+  { idempotencyKey: "subculture-b-2026-114-pass-2" },
 );
 ```
 
@@ -752,10 +752,12 @@ What a device token gets back when it steps outside its lane:
 | An unknown or revoked token | `401 UNAUTHORIZED` |
 
 `client.devices.listTokens(deviceId)` shows each token's prefix, status and last
-use, so you can tell them apart. A `devices.revokeToken()` method will follow
-when the API's revoke endpoint ships; until then, contact
-[support@xplantpro.com](mailto:support@xplantpro.com) to revoke a token that
-may be exposed. If a token is lost, create another.
+use, so you can tell them apart.
+
+**Taking a device out of service in xPlant revokes all of its tokens at once;
+deleting the device removes them.** A `devices.revokeToken()` method, for
+revoking a single token, will follow when the API's revoke endpoint ships. If a
+token is lost, create another.
 
 ---
 

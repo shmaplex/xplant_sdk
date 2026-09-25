@@ -80,8 +80,8 @@ export class TasksResource {
    *
    * @example
    * await client.tasks.create(
-   *   { title: "Replate N2001 — second pass", priority: "high", assigned_to: memberId },
-   *   { idempotencyKey: "replate-N2001-pass-2" },
+   *   { title: "Subculture B-2026-114 — second pass", priority: "high", assigned_to: memberId },
+   *   { idempotencyKey: "subculture-b-2026-114-pass-2" },
    * );
    */
   async create(input: TaskCreateInput, options?: WriteOptions): Promise<TaskSummary> {

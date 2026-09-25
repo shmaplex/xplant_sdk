@@ -53,7 +53,7 @@ export class ExplantsResource {
   }
 
   /**
-   * Resolve your own batch identifier (e.g. `"N2001"`) to the record it was
+   * Resolve your own batch identifier (e.g. `"LINE-0412"`) to the record it was
    * imported under, or `null` when nothing matches.
    * Requires the `read:explants` scope.
    *
@@ -62,7 +62,7 @@ export class ExplantsResource {
    * error.
    *
    * @example
-   * const batch = await client.explants.findByExternalId("N2001");
+   * const batch = await client.explants.findByExternalId("LINE-0412");
    */
   async findByExternalId(
     externalId: string,
