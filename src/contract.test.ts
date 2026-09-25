@@ -97,7 +97,7 @@ const INVOCATIONS: Invocation[] = [
   {
     name: "transfers.create",
     expect: "POST /api/v1/transfers",
-    call: (c, o) => c.transfers.create({ explant_id: "e1", to_location: "Shelf 3" }, o),
+    call: (c, o) => c.transfers.create({ explant_id: "e1", to_location: "Shelf 3", status: "pending" }, o),
   },
   {
     name: "events.list",

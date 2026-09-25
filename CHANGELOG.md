@@ -16,6 +16,9 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.6.1] — 2026-09-25
 
 ### Added
+- `TransferCreateInput.status`: `"completed"` (the default) or `"pending"`, for
+  a transfer that is planned but not done. It comes with a `TransferStatus`
+  type. New transfers read `"completed"` where they used to read `"active"`.
 - `DeviceEventPayload.external_id`. A repeated event for the same device and
   `external_id` is stored once, and `devices.recordEvent()` resolves with the
   event already stored.
@@ -25,6 +28,10 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   too, since the API now returns it along with `meta.duplicate`. It still
   resolves as `null` against older API versions, which returned no data.
 - Docs:
+  - `stages.advance()` takes a stage from the lab's own stage list, returns
+    its key, and answers 422 for a stage the lab doesn't use.
+  - Transfers and stage moves appear in `events.list()` as `transfer` and
+    `stage_change` events.
   - SOP step evidence against a step that isn't in the run's version answers
     `404`.
   - `409 SOP_RUN_CLOSED` now covers every ended run: completed, failed,

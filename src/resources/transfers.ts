@@ -46,7 +46,9 @@ export class TransfersResource {
    *
    * `transfer_cycle` continues from the last cycle recorded for that plant or
    * explant when you omit it, so a device posting on a schedule does not have
-   * to track the count itself.
+   * to track the count itself. `status` is `"completed"` by default; send
+   * `"pending"` for a transfer that is planned but not done. Each transfer also
+   * appears in `events.list()` as a `transfer` event.
    *
    * @example
    * await client.transfers.create({

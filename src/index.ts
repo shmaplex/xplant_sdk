@@ -69,6 +69,7 @@ export type {
   StageListParams,
   StageAdvanceInput,
   TransferSummary,
+  TransferStatus,
   TransferListParams,
   TransferCreateInput,
   TaskPriority,

@@ -381,6 +381,7 @@ Pass exactly one of `plant_id` or `explant_id`.
 const history = await client.stages.list({ explant_id: "explant-uuid" });
 
 // POST /api/v1/stages — write:transfers. Completes the current stage and starts the new one.
+// `stage` must be in the lab's stage list; the result carries its key ("Rooting" → "rooting").
 const stage = await client.stages.advance({
   explant_id: "explant-uuid",
   stage: "rooting",
@@ -401,9 +402,13 @@ await client.transfers.create({
   explant_id: "explant-uuid",
   to_location: "Shelf 3",
   notes: "Clean, no browning",
+  status: "completed",   // completed (the default) | pending, for a planned transfer
   // transfer_cycle continues from the last recorded cycle unless you set it
 });
 ```
+
+Every transfer and stage move also appears in `events.list()`, as `transfer`
+and `stage_change` events, so one delta feed covers them.
 
 ### `client.events` — change history
 
