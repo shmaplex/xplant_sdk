@@ -25,6 +25,11 @@ export interface XPlantApiResponse<T> {
   code?: string;
   /** Extra out-of-band detail. See `TaskUpdateResult` for the task-write case. */
   meta?: Record<string, unknown>;
+  /**
+   * The API's id for this request, from the `X-Request-Id` header — set by the
+   * SDK, not part of the response body. Quote it when contacting support.
+   */
+  requestId?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -997,8 +1002,15 @@ export interface SensorReadingListParams {
   type?: SensorType | (string & {});
   /** ISO 8601 — only readings recorded at or after this instant. */
   since?: string;
-  /** Defaults to 100 server-side, capped at 1000. This endpoint has no offset. */
+  /**
+   * ISO 8601 — only readings recorded at or before this instant (inclusive).
+   * A `since` later than `until` answers `422 VALIDATION_ERROR`.
+   */
+  until?: string;
+  /** Rows per page. Defaults to 100, capped at 1000. */
   limit?: number;
+  /** Resume from a page's `nextCursor`. */
+  cursor?: string;
 }
 
 // ---------------------------------------------------------------------------

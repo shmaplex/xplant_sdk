@@ -1,4 +1,5 @@
 import type { EnvelopeRequestFn } from "../client.js";
+import { ListPromise } from "../list.js";
 import { toQuery } from "../query.js";
 import {
   MAX_SENSOR_BATCH,
@@ -117,38 +118,50 @@ export class SensorReadingsResource {
   }
 
   /**
-   * List recent sensor readings, newest first. This endpoint takes a `limit`
-   * but no `offset` — narrow with `since` to walk back further.
+   * List sensor readings, newest first — 100 per page by default, up to 1000.
    * Requires a workspace key with the `read:sensor_readings` scope.
    *
    * Pass a device id for a single device's history, or a params object to
-   * filter by room, type, or time.
+   * filter by room, type, or a time window (`since` / `until`, both
+   * inclusive). Await it for the first page, or iterate it to walk the whole
+   * window — see {@link ListPromise}.
    *
    * @example
-   * const recent = await client.sensorReadings.list({
+   * for await (const r of client.sensorReadings.list({
    *   room_id: roomId,
    *   type: "temperature",
-   *   since: "2026-08-01T00:00:00Z",
-   * });
+   *   since: "2026-09-01T00:00:00Z",
+   *   until: "2026-09-30T23:59:59Z",
+   *   limit: 1000,
+   * })) {
+   *   console.log(r.recorded_at, r.value, r.unit);
+   * }
    */
-  async list(
+  list(
     params: string | SensorReadingListParams = {},
     options?: RequestOptions,
-  ): Promise<SensorReading[]> {
+  ): ListPromise<SensorReading> {
     const filters: SensorReadingListParams =
       typeof params === "string" ? { device_id: params } : params;
 
-    const { data } = await this.request<SensorReading[]>(
-      `/api/v1/sensor-readings${toQuery({
-        device_id: filters.device_id,
-        room_id: filters.room_id,
-        type: filters.type,
-        since: filters.since,
-        limit: filters.limit,
-      })}`,
-      {},
-      options,
+    return new ListPromise(
+      (page) =>
+        this.request<SensorReading[]>(
+          `/api/v1/sensor-readings${toQuery({
+            device_id: filters.device_id,
+            room_id: filters.room_id,
+            type: filters.type,
+            since: filters.since,
+            until: filters.until,
+            limit: page.limit,
+            cursor: page.cursor,
+          })}`,
+          {},
+          options,
+        ),
+      { limit: filters.limit, cursor: filters.cursor },
+      // Readings never paged by offset before they paged by cursor.
+      { offsetFallback: false },
     );
-    return data;
   }
 }

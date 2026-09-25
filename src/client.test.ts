@@ -509,6 +509,14 @@ describe("timeouts and connection failures", () => {
 });
 
 describe("response metadata", () => {
+  it("puts the API's request id on a successful envelope", async () => {
+    stubFetch(() => ({ ...ok([]), headers: { "X-Request-Id": "req_ok_1" } }));
+
+    const envelope = await new XPlantClient({ apiKey: "xpk_live_test" }).requestEnvelope("/api/v1/plants");
+
+    expect(envelope.requestId).toBe("req_ok_1");
+  });
+
   it("puts the API's request id on an error", async () => {
     stubFetch(() => fail(404, "NOT_FOUND", { "X-Request-Id": "req_123" }));
 

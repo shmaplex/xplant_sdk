@@ -298,7 +298,7 @@ export class XPlantClient {
         continue;
       }
 
-      return this.readSuccess<T>(res.status, text);
+      return { ...this.readSuccess<T>(res.status, text), requestId: readHeader(res, "X-Request-Id") };
     }
   }
 

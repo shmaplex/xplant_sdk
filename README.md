@@ -272,6 +272,7 @@ When you need the envelope itself (for `meta`), use the escape hatch:
 const envelope = await client.requestEnvelope<PlantSummary[]>("/api/v1/plants");
 envelope.data; // PlantSummary[]
 envelope.meta; // Record<string, unknown> | undefined
+envelope.requestId; // the API's id for this request, from X-Request-Id
 ```
 
 ---
@@ -595,9 +596,11 @@ const registered = await client.devices.register({
   firmware_version: "1.2.0",
 });
 
-// GET /api/v1/devices — read:devices. Not paged.
-const devices = await client.devices.list();
-const one = await client.devices.get(registered.id); // filters the list; 404 if absent
+// GET /api/v1/devices — read:devices. 200 per page; iterate for every device.
+for await (const device of client.devices.list()) {
+  console.log(device.name, device.status, device.last_seen_at);
+}
+const one = await client.devices.get(registered.id); // searches every page; 404 if absent
 
 // POST /api/v1/devices/{deviceId}/tokens — write:devices, workspace key only
 const { token } = await client.devices.createToken(registered.id, { name: "shelf-3-pi" });
@@ -649,13 +652,18 @@ await device.sensorReadings.createBatch([
 ]);
 
 // GET /api/v1/sensor-readings — read:sensor_readings (workspace key). Newest first.
-const readings = await client.sensorReadings.list("device-uuid");
-const recent = await client.sensorReadings.list({
+const latest = await client.sensorReadings.list("device-uuid"); // one page
+
+// Every reading in a window — since and until are both inclusive
+for await (const r of client.sensorReadings.list({
   room_id: "room-uuid",
   type: "temperature",
   since: "2026-09-01T00:00:00Z",
-  limit: 500,              // defaults to 100, capped at 1000; no offset
-});
+  until: "2026-09-30T23:59:59Z",
+  limit: 1000,             // page size: defaults to 100, capped at 1000
+})) {
+  console.log(r.recorded_at, r.value, r.unit);
+}
 ```
 
 **Batch your posts.** One request per reading spends the rate limit many times
@@ -884,15 +892,17 @@ for await (const page of client.explants.list({ limit: 200 }).pages()) {
 }
 ```
 
-This works for `plants`, `explants`, `stages`, `transfers`, `events`, `tasks`,
-`contaminations`, `comments`, `assets`, `mediaRecipes`, `equipment`,
-`equipment.listEvents`, `pricing`, `commerce`,
-`taskDemand` and `sops`. `limit` sets the page size.
+Every list method works this way: `plants`, `explants`, `stages`,
+`transfers`, `events`, `tasks`, `taskDemand`, `sops`, `devices`,
+`devices.listTokens`, `sensorReadings`, `contaminations`, `comments`, `assets`,
+`mediaRecipes`, `equipment`, `equipment.listEvents`, `pricing` and `commerce`.
+`limit` sets the page size. It defaults to 50 and is capped at 200, except for
+devices and device tokens (200 by default) and sensor readings (100 by default,
+up to 1000).
 
-**Cursors.** The API is moving its lists from offsets to cursors, which stay
-correct while rows are being added. The SDK follows whichever an endpoint
-returns, so iteration needs no change as endpoints move over. Where an endpoint
-pages by cursor, each page from `.pages()` carries a `nextCursor` you can save
+**Cursors.** Every list pages by cursor, which stays correct while rows are
+being added: nothing is skipped or seen twice. The SDK follows the cursor for
+you. Each page from `.pages()` also carries a `nextCursor`, which you can save
 and pass back as `cursor` to resume later — in another run, say:
 
 ```typescript
@@ -905,15 +915,11 @@ for await (const page of client.plants.list({ limit: 200, cursor }).pages()) {
 
 A cursor is opaque: store it, don't parse it. Use it with the same filters it
 came from. One the API no longer accepts answers `422 INVALID_CURSOR` — start
-again from the first page. Passing a cursor to an endpoint that still pages by
-offset throws rather than silently starting from the top.
+again from the first page.
 
-Until an endpoint pages by cursor, offsets are positions, not bookmarks: rows
-added while you iterate can shift across a page boundary, so a row may be
-skipped or seen twice. Key what you store by `id`.
-
-`devices.list()` does not page, and `sensorReadings.list()` takes a `limit`
-(up to 1000) but no `offset` — narrow it with `since`.
+`offset` still works for `limit`/`offset` paging, but offsets are positions,
+not bookmarks: rows added between requests can shift across a page boundary.
+Prefer iterating, or saved cursors.
 
 ---
 
@@ -938,7 +944,7 @@ try {
     err.code;       // stable machine-readable code — branch on this
     err.message;    // readable, includes the API's error text; wording may change
     err.retryAfter; // seconds to wait, from Retry-After, or null
-    err.requestId;  // the API's id for this request, when it sends one — quote it to support
+    err.requestId;  // the API's id for this request — quote it to support
     err.body;       // the raw response text
   } else if (err instanceof XPlantTimeoutError) {
     err.timeout;    // no answer within this many ms

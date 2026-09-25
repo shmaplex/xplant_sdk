@@ -17,6 +17,19 @@ export interface ListPage<T> {
   nextCursor: string | null;
   /** Whether another page follows. */
   hasMore: boolean;
+  /** The API's id for the request that fetched this page, from `X-Request-Id`. */
+  requestId: string | null;
+}
+
+/** How a list pages when the endpoint returns no cursor. */
+export interface ListPromiseOptions {
+  /**
+   * Fall back to offset paging when a page carries no `meta.next_cursor`.
+   * Endpoints that never honoured `offset` set this to `false`, so a response
+   * without a cursor is treated as the only page instead of being re-requested
+   * at ever-larger offsets.
+   */
+  offsetFallback?: boolean;
 }
 
 /** Where a page starts: a cursor the API issued, or an offset. */
@@ -70,6 +83,7 @@ export class ListPromise<T> implements Promise<T[]>, AsyncIterable<T> {
   constructor(
     private readonly load: PageLoader<T>,
     private readonly start: PageParams,
+    private readonly listOptions: ListPromiseOptions = {},
   ) {
     this.first = load({ limit: start.limit, offset: start.offset, cursor: start.cursor }).then(
       (envelope) => {
@@ -122,11 +136,13 @@ export class ListPromise<T> implements Promise<T[]>, AsyncIterable<T> {
     for (;;) {
       const data = Array.isArray(envelope.data) ? envelope.data : [];
       const cursor = readNextCursor(envelope.meta);
+      const offsetFallback = this.listOptions.offsetFallback !== false;
       // Offset paging has no cursor, so a full page is the only sign of more.
       const hasMore =
-        data.length > 0 && (cursor === undefined ? data.length >= pageSize : cursor !== null);
+        data.length > 0 &&
+        (cursor === undefined ? offsetFallback && data.length >= pageSize : cursor !== null);
 
-      yield { data, nextCursor: cursor ?? null, hasMore };
+      yield { data, nextCursor: cursor ?? null, hasMore, requestId: envelope.requestId ?? null };
       if (!hasMore) return;
 
       if (typeof cursor === "string") {
