@@ -1,4 +1,5 @@
 import type { EnvelopeRequestFn } from "../client.js";
+import { ListPromise } from "../list.js";
 import { toQuery } from "../query.js";
 import type {
   RequestOptions,
@@ -21,18 +22,22 @@ export class StagesResource {
    * @example
    * const history = await client.stages.list({ explant_id: explantId, limit: 20 });
    */
-  async list(params: StageListParams, options?: RequestOptions): Promise<StageSummary[]> {
-    const { data } = await this.request<StageSummary[]>(
-      `/api/v1/stages${toQuery({
-        plant_id: params.plant_id,
-        explant_id: params.explant_id,
-        limit: params.limit,
-        offset: params.offset,
-      })}`,
-      {},
-      options,
+  list(params: StageListParams, options?: RequestOptions): ListPromise<StageSummary> {
+    return new ListPromise(
+      (page) =>
+        this.request<StageSummary[]>(
+          `/api/v1/stages${toQuery({
+            plant_id: params.plant_id,
+            explant_id: params.explant_id,
+            limit: page.limit,
+            offset: page.offset,
+            cursor: page.cursor,
+          })}`,
+          {},
+          options,
+        ),
+      params,
     );
-    return data;
   }
 
   /**

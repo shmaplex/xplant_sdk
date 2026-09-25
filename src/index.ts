@@ -1,16 +1,19 @@
 // @shmaplex/xplant-sdk — public API surface
 // https://github.com/shmaplex/xplant_sdk
 
-export { XPlantClient, DEFAULT_BASE_URL, API_KEYS_URL } from "./client.js";
+export { XPlantClient, DEFAULT_BASE_URL, API_KEYS_URL, DEFAULT_TIMEOUT_MS } from "./client.js";
 export type { XPlantClientConfig, CallOptions, EnvelopeRequestFn, RequestFn } from "./client.js";
 
-export { XPlantError } from "./errors.js";
-export type { XPlantErrorCode } from "./errors.js";
+export { XPlantError, XPlantConnectionError, XPlantTimeoutError } from "./errors.js";
+export type { XPlantErrorCode, RateLimitInfo } from "./errors.js";
 
 export type { RetryOptions } from "./retry.js";
 
-export { paginate, MAX_PAGE_SIZE } from "./paginate.js";
-export type { PaginateOptions } from "./paginate.js";
+export { ListPromise, MAX_PAGE_SIZE } from "./list.js";
+export type { ListPage } from "./list.js";
+
+export { SensorReadingBuffer } from "./sensor-buffer.js";
+export type { SensorBufferOptions } from "./sensor-buffer.js";
 
 export { MeResource } from "./resources/me.js";
 export { WorkspacesResource } from "./resources/workspaces.js";

@@ -1,4 +1,5 @@
 import type { EnvelopeRequestFn } from "../client.js";
+import { ListPromise } from "../list.js";
 import { toQuery } from "../query.js";
 import type {
   PriorityWriteReport,
@@ -36,20 +37,26 @@ export class TasksResource {
    * Requires the `read:tasks` scope.
    *
    * @example
-   * const todo = await client.tasks.list({ status: "todo", limit: 50 });
+   * for await (const task of client.tasks.list({ status: "todo" })) {
+   *   console.log(task.title, task.due_date);
+   * }
    */
-  async list(params: TaskListParams = {}, options?: RequestOptions): Promise<TaskSummary[]> {
-    const { data } = await this.request<TaskSummary[]>(
-      `/api/v1/tasks${toQuery({
-        limit: params.limit,
-        offset: params.offset,
-        status: params.status,
-        assigned_to: params.assigned_to,
-      })}`,
-      {},
-      options,
+  list(params: TaskListParams = {}, options?: RequestOptions): ListPromise<TaskSummary> {
+    return new ListPromise(
+      (page) =>
+        this.request<TaskSummary[]>(
+          `/api/v1/tasks${toQuery({
+            limit: page.limit,
+            offset: page.offset,
+            cursor: page.cursor,
+            status: params.status,
+            assigned_to: params.assigned_to,
+          })}`,
+          {},
+          options,
+        ),
+      params,
     );
-    return data;
   }
 
   /**

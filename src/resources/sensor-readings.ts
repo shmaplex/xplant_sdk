@@ -1,5 +1,10 @@
 import type { EnvelopeRequestFn } from "../client.js";
 import { toQuery } from "../query.js";
+import {
+  MAX_SENSOR_BATCH,
+  SensorReadingBuffer,
+  type SensorBufferOptions,
+} from "../sensor-buffer.js";
 import type {
   RequestOptions,
   SensorReading,
@@ -8,8 +13,7 @@ import type {
   WriteOptions,
 } from "../types.js";
 
-/** The most readings one `createBatch()` call may carry. */
-export const MAX_SENSOR_BATCH = 500;
+export { MAX_SENSOR_BATCH };
 
 function toWire(payload: SensorReadingPayload): Record<string, unknown> {
   const { timestamp, ...rest } = payload;
@@ -86,6 +90,23 @@ export class SensorReadingsResource {
       options,
     );
     return data;
+  }
+
+  /**
+   * A buffer that batches readings and sends them in the background — the way
+   * a device should post. Readings are sent every `flushIntervalMs` (30 s) or
+   * once `maxBatch` (500) are waiting, kept through outages, and resent safely.
+   * See {@link SensorReadingBuffer}.
+   *
+   * @example
+   * const buffer = device.sensorReadings.buffer();
+   * setInterval(() => {
+   *   buffer.add({ device_id: deviceId, type: "humidity", value: readHumidity(), unit: "%" });
+   * }, 60_000);
+   * process.on("SIGTERM", () => buffer.close().finally(() => process.exit(0)));
+   */
+  buffer(options?: SensorBufferOptions): SensorReadingBuffer {
+    return new SensorReadingBuffer((readings) => this.createBatch(readings), options);
   }
 
   /**

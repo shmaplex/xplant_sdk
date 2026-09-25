@@ -22,11 +22,18 @@ Connect sensors, Raspberry Pis, Arduino devices, scripts, and external tools to 
 > diverged and npm briefly served the stale one (see [#4](https://github.com/shmaplex/xplant_sdk/issues/4)).
 > Publishes to that name happen from this repository's `main` branch only.
 
+**Documentation:** the guides and endpoint reference for the xPlant API —
+quickstart, authentication, scopes, and every endpoint with its request and
+response — live in [**xplant_os/docs**](https://github.com/shmaplex/xplant_os/tree/main/docs).
+This README covers the JavaScript/TypeScript SDK. Hardware examples live in the
+same [xplant_os](https://github.com/shmaplex/xplant_os) repository.
+
 ---
 
 ## Contents
 
 - [Installation](#installation)
+- [Plans and access](#plans-and-access)
 - [Quick start](#quick-start)
 - [Authentication and scopes](#authentication-and-scopes)
 - [Response shape](#response-shape)
@@ -55,7 +62,35 @@ yarn add @shmaplex/xplant-sdk
 pnpm add @shmaplex/xplant-sdk
 ```
 
-Requires **Node.js 18+**. Works in browser environments too (uses the native `fetch` API).
+Requires **Node.js 18+**, or any runtime with a standard `fetch` — Deno, Bun,
+and edge or serverless functions.
+
+> **Call the API from your server, not a web page.** A key in browser code can
+> be read by anyone who loads the page, and the API does not accept requests
+> from browsers.
+
+---
+
+## Plans and access
+
+The xPlant API is included with **xPlant+ Teams** and **Enterprise**. On other
+plans, requests answer `402 PAID_PLAN_REQUIRED` — see
+[plans](https://www.xplantpro.com/en/subscriptions) to upgrade.
+
+Your key unlocks what your plan allows:
+
+- **Scopes decide what a key can reach.** You pick them when you create the key.
+  Give each integration only the scopes it needs, and a separate key per
+  integration, so one can be revoked without touching the others.
+- **Your plan's allowances still apply.** For example, the number of devices
+  you can connect at once comes from your plan; registering one past it answers
+  `402 DEVICE_LIMIT_REACHED`. The [plans page](https://www.xplantpro.com/en/subscriptions)
+  lists each plan's allowances.
+- **A key acts in one workspace** — the one it was created in — and only while
+  its owner is still a member there.
+
+**Enterprise** can scope organisation-specific integrations and API
+requirements. Contact [support@xplantpro.com](mailto:support@xplantpro.com).
 
 ---
 
@@ -105,12 +140,13 @@ new XPlantClient({
   // deviceToken: "xpd_live_…",        // on a device, instead of apiKey — see Device tokens
   baseUrl: "https://app.xplantpro.com", // the default
   retry: true,                          // opt in to retries — see Rate limits and retries
-  fetch: customFetch,                   // optional; defaults to the global fetch
+  timeout: 60_000,                      // ms per attempt (the default); 0 waits indefinitely
+  fetch: customFetch,                   // optional; e.g. to log or trace requests
 });
 ```
 
-Every method also takes a final options object: `{ signal }` for reads, and
-`{ signal, idempotencyKey }` for writes.
+Every method also takes a final options object: `{ signal, timeout }` for reads,
+and `{ signal, timeout, idempotencyKey }` for writes.
 
 ---
 
@@ -232,8 +268,12 @@ one entry.
 ### `client.plants`
 
 ```typescript
-// GET /api/v1/plants — read:plants. Newest first; limit defaults to 50, max 200.
-const plants = await client.plants.list({ limit: 50, offset: 0 });
+// GET /api/v1/plants — read:plants. Newest first.
+const firstPage = await client.plants.list({ limit: 50 });   // one page
+
+for await (const plant of client.plants.list()) {            // every plant
+  console.log(plant.name);
+}
 
 // GET /api/v1/plants/{id}
 const plant = await client.plants.get("plant-uuid");
@@ -246,7 +286,9 @@ const match = await client.plants.findByExternalId("LINE-0412");
 
 ```typescript
 // GET /api/v1/explants — read:explants. Newest first.
-const batches = await client.explants.list({ limit: 50 });
+for await (const batch of client.explants.list()) {
+  console.log(batch.external_id, batch.current_count);
+}
 
 // GET /api/v1/explants/{id}
 const batch = await client.explants.get("explant-uuid");
@@ -292,14 +334,27 @@ await client.transfers.create({
 
 ```typescript
 // GET /api/v1/events — read:events. Oldest first. `entity` is required.
-const events = await client.events.list({ entity: "explant" });
-
-// Pull only what's new: save the newest created_at and pass it back as `since`
-let since = events[events.length - 1]?.created_at;
-const delta = await client.events.list({ entity: "explant", since });
+for await (const event of client.events.list({ entity: "explant" })) {
+  console.log(event.event_type, event.entity_id);
+}
 ```
 
 Plant and explant history are paged separately — call once per entity type.
+
+**Pulling only what's new.** Save the newest `created_at` you received. On the
+next run, start from a little before it — a minute is plenty — and store events
+keyed by `id`, so reading that overlap twice is harmless. Events written
+together share a timestamp, and one that commits late can carry an earlier
+timestamp than one you have already read; the overlap catches both.
+
+```typescript
+// `newest` is the created_at saved by the previous run
+const since = new Date(Date.parse(newest) - 60_000).toISOString();
+for await (const event of client.events.list({ entity: "explant", since })) {
+  await store.upsert(event.id, event);
+  if (event.created_at > newest) newest = event.created_at;
+}
+```
 
 ### `client.tasks`
 
@@ -524,11 +579,37 @@ const recent = await client.sensorReadings.list({
 ```
 
 **Batch your posts.** One request per reading spends the rate limit many times
-faster for the same data. Buffer locally and flush every 30–60 seconds, or once
-500 readings are queued. Give every reading an `external_id` and a
+faster for the same data. Give every reading an `external_id` and a
 `recorded_at`: a reading with the same device, `external_id` and `recorded_at`
 as one already stored is dropped, so a batch resent after a network failure is
 not stored twice.
+
+`sensorReadings.buffer()` does all of that for you on a device:
+
+```typescript
+const buffer = device.sensorReadings.buffer({
+  flushIntervalMs: 30_000,   // send at least this often (the default)
+  maxBatch: 500,             // or as soon as this many are waiting (the default)
+  onError: (err, { pending, dropped }) => console.warn(err, { pending, dropped }),
+});
+
+setInterval(() => {
+  buffer.add({ device_id: DEVICE_ID, type: "temperature", value: readProbe(), unit: "C" });
+}, 60_000);
+
+// Before the process exits — anything still queued is lost otherwise
+process.on("SIGTERM", () => buffer.close().finally(() => process.exit(0)));
+```
+
+- Each reading is stamped with `recorded_at` when you add it, and an
+  `external_id` unless it has one, so a resent batch is stored once.
+- When a send fails, the readings stay queued in order and go out with the
+  next send. Up to `maxBuffered` (10 000) are held; past that the oldest are
+  dropped and reported to `onError`.
+- A reading the API rejects as invalid is dropped and reported, without
+  holding up the rest of its batch.
+- The queue lives in memory. Readings still queued when the process dies are
+  lost, so call `close()` on shutdown.
 
 ### `client.equipment`
 
@@ -553,31 +634,49 @@ await client.equipment.recordEvent("hood-uuid", {
 
 ## Paging
 
-List endpoints page with `limit` and `offset`. `limit` defaults to 50 and is
-capped at 200. The API returns no total, so a page shorter than `limit` is the
-last one.
-
-`paginate()` walks every page for you:
+Every list method that pages returns a `ListPromise`. Await it for one page, or
+iterate it for everything:
 
 ```typescript
-import { paginate } from "@shmaplex/xplant-sdk";
+// One page (50 rows by default, up to 200)
+const firstPage = await client.plants.list({ limit: 200 });
 
-for await (const plant of paginate((page) => client.plants.list(page))) {
-  console.log(plant.name);
+// Every row — the SDK fetches pages as the loop reaches them
+for await (const task of client.tasks.list({ status: "todo" })) {
+  if (task.priority === "urgent") break; // stops requesting pages
 }
 
-// Filters go alongside the page
-const todo = paginate((page) => client.tasks.list({ status: "todo", ...page }));
-for await (const task of todo) {
-  if (task.priority === "urgent") break; // stops requesting pages
+// Whole pages, e.g. to write each one to your database in a single statement
+for await (const page of client.explants.list({ limit: 200 }).pages()) {
+  await db.upsertMany(page.data);
 }
 ```
 
-It works with `plants`, `explants`, `stages`, `transfers`, `events`, `tasks`,
-`taskDemand` and `sops`. `pageSize` defaults to the 200-row maximum and is
-capped there. Offsets are positions, not bookmarks: rows created while you
-iterate can shift across a page boundary. For a stable feed of changes, use
-`events.list({ since })`.
+This works for `plants`, `explants`, `stages`, `transfers`, `events`, `tasks`,
+`taskDemand` and `sops`. `limit` sets the page size.
+
+**Cursors.** The API is moving its lists from offsets to cursors, which stay
+correct while rows are being added. The SDK follows whichever an endpoint
+returns, so iteration needs no change as endpoints move over. Where an endpoint
+pages by cursor, each page from `.pages()` carries a `nextCursor` you can save
+and pass back as `cursor` to resume later — in another run, say:
+
+```typescript
+let cursor = await loadCheckpoint(); // undefined on the first run
+for await (const page of client.plants.list({ limit: 200, cursor }).pages()) {
+  await db.upsertMany(page.data);
+  if (page.nextCursor) await saveCheckpoint(page.nextCursor);
+}
+```
+
+A cursor is opaque: store it, don't parse it. Use it with the same filters it
+came from. One the API no longer accepts answers `422 INVALID_CURSOR` — start
+again from the first page. Passing a cursor to an endpoint that still pages by
+offset throws rather than silently starting from the top.
+
+Until an endpoint pages by cursor, offsets are positions, not bookmarks: rows
+added while you iterate can shift across a page boundary, so a row may be
+skipped or seen twice. Key what you store by `id`.
 
 `devices.list()` does not page, and `sensorReadings.list()` takes a `limit`
 (up to 1000) but no `offset` — narrow it with `since`.
@@ -589,7 +688,11 @@ iterate can shift across a page boundary. For a stable feed of changes, use
 Every API failure throws an `XPlantError`:
 
 ```typescript
-import { XPlantError } from "@shmaplex/xplant-sdk";
+import {
+  XPlantConnectionError,
+  XPlantError,
+  XPlantTimeoutError,
+} from "@shmaplex/xplant-sdk";
 
 try {
   await client.tasks.create({ title: "Subculture B-2026-114" });
@@ -599,31 +702,41 @@ try {
     err.code;       // stable machine-readable code — branch on this
     err.message;    // readable, includes the API's error text; wording may change
     err.retryAfter; // seconds to wait, from Retry-After, or null
+    err.requestId;  // the API's id for this request — quote it to support
     err.body;       // the raw response text
+  } else if (err instanceof XPlantTimeoutError) {
+    err.timeout;    // no answer within this many ms
+  } else if (err instanceof XPlantConnectionError) {
+    err.cause;      // the network error fetch raised
   }
   throw err;
 }
 ```
 
+`XPlantError` means the API answered with a failure. `XPlantConnectionError`
+means it never answered — DNS, TLS, a dropped connection — and its subclass
+`XPlantTimeoutError` means an attempt ran past `timeout`. Aborting through your
+own `signal` rejects with the signal's reason instead.
+
 | Status | `code` | Meaning |
 |---|---|---|
 | 400, 422 | `VALIDATION_ERROR` | The request failed validation; the message names the field |
 | 401 | `UNAUTHORIZED` | No key, an unknown or revoked key or device token, or the key's owner left the workspace |
-| 402 | `PAID_PLAN_REQUIRED` | The API requires a paid workspace |
+| 402 | `PAID_PLAN_REQUIRED` | The workspace's plan does not include the API — see [Plans and access](#plans-and-access) |
 | 402 | `DEVICE_LIMIT_REACHED` | The workspace has connected every device its plan includes |
 | 403 | `FORBIDDEN` | The key lacks the scope; the message names it |
 | 403 | `DEVICE_TOKEN_NOT_ACCEPTED` | A device token was sent to an endpoint that needs a workspace key |
 | 403 | `DEVICE_TOKEN_WRONG_DEVICE` | A device token tried to write about another device |
 | 404 | `NOT_FOUND` | Not found — or in another workspace; the API does not distinguish |
 | 409 | `IDEMPOTENCY_IN_FLIGHT` | A request with this `Idempotency-Key` is still running; retry shortly |
+| 422 | `INVALID_CURSOR` | The cursor is malformed, from another endpoint, or used with other filters; start from the first page |
 | 409 | `SOP_RUN_NOT_EFFECTIVE`, `SOP_RUN_CLOSED` | The SOP has no version in force; the run is complete |
 | 409 | `DEVICE_INGEST_DISABLED` | A device in the batch is paused or retired |
 | 429 | `RATE_LIMIT_EXCEEDED` | A rate limit is spent; wait `err.retryAfter` seconds |
 | 500 | `*_FAILED` | The server could not complete the request |
 | 503 | `DEVICE_LIMIT_UNAVAILABLE` | The device allowance could not be checked; nothing was registered |
 
-`err.code` is `null` when a gateway answered instead of the API. A network
-failure rejects with the error `fetch` raised, not an `XPlantError`.
+`err.code` is `null` when a gateway answered instead of the API.
 
 **For the broad class of failure, branch on `status`.** 401 means fix the
 credential, 403 means the credential is not allowed to do this. Some older
@@ -670,6 +783,25 @@ With retry on:
   a failure that does not prove they did not run.
 - Nothing else is retried. `maxRetries` (default 2) caps the attempts after the
   first; an `AbortSignal` passed in the options cancels a wait in progress.
+
+**Timeouts.** Each attempt may take 60 seconds, including reading the response,
+before it is abandoned with `XPlantTimeoutError`. Set `timeout` on the client or
+on one call; `0` waits indefinitely. With retry on, a timed-out read is retried
+like any other network failure.
+
+**Pacing a bulk job.** `client.rateLimit` holds the per-key budget from the most
+recent response that reported one — `{ limit, remaining, reset }`, with `reset`
+in seconds — or `null` until a response has:
+
+```typescript
+for await (const page of client.tasks.list({ limit: 200 }).pages()) {
+  await process(page.data);
+  const budget = client.rateLimit;
+  if (budget && budget.remaining < 50) {
+    await new Promise((r) => setTimeout(r, budget.reset * 1000));
+  }
+}
+```
 
 ---
 
@@ -736,8 +868,11 @@ const device = new XPlantClient({
 });
 
 await device.devices.heartbeat(DEVICE_ID);
-await device.sensorReadings.createBatch(readings);
 await device.devices.recordEvent({ device_id: DEVICE_ID, event_type: "firmware_update" });
+
+// Readings: queue them and let the buffer batch, send and resend
+const buffer = device.sensorReadings.buffer();
+buffer.add({ device_id: DEVICE_ID, type: "humidity", value: 71, unit: "%" });
 ```
 
 `deviceToken` only accepts an `xpd_` token: passing a workspace key there
@@ -781,6 +916,9 @@ import type {
   XPlantScope,
   XPlantErrorCode,
   WriteOptions,
+  ListPage,
+  RateLimitInfo,
+  SensorBufferOptions,
 } from "@shmaplex/xplant-sdk";
 ```
 
@@ -807,8 +945,15 @@ code:
 - **`SensorType` is `temperature | humidity | ph | co2 | light | other`.**
   `light_lux` and `ec` were never accepted.
 
-Everything else is additive: new resources, device tokens, retries, idempotency
-keys and `paginate()`.
+- **List methods return a `ListPromise`.** Awaiting one still gives you the
+  first page as an array, so existing code keeps working; iterating it gives
+  you every page.
+- **A network failure throws `XPlantConnectionError`** (or `XPlantTimeoutError`)
+  instead of the raw `fetch` error, which is on `err.cause`. Requests now time
+  out after 60 seconds by default.
+
+Everything else is additive: new resources, device tokens, retries,
+idempotency keys, cursors and the sensor buffer.
 
 ---
 
