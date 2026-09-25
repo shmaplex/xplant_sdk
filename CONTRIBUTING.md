@@ -41,43 +41,28 @@ evidence and equipment events.
 
 ## Publishing (maintainers only)
 
-Releases publish from a maintainer's machine when a `v*` tag is pushed. The
-GitHub Actions publish workflow (`publish.yml`) is paused for now.
+Releases publish themselves when a version bump reaches `main`. There is
+nothing to run locally and no npm token to manage.
 
-One-time setup in your clone:
+1. In a pull request, bump `version` in `package.json` and add a dated entry to
+   `CHANGELOG.md`: `## [0.x.y] — YYYY-MM-DD`.
+2. Merge it.
 
-```bash
-git config core.hooksPath .githooks   # enables .githooks/pre-push
-npm login                             # an account that can publish @shmaplex
-```
+`.github/workflows/publish.yml` then:
+- sees that npm doesn't have that version yet
+- checks for the dated CHANGELOG entry
+- runs lint, build, typecheck and tests
+- publishes to npm with provenance, through npm trusted publishing
+- tags the merge commit `v0.x.y` and creates the GitHub Release from the
+  CHANGELOG entry
 
-To release:
+Other things to know:
+- A merge that doesn't change the version publishes nothing.
+- A prerelease version such as `0.5.0-rc.1` is published under the `next` tag,
+  so it never becomes `latest`.
+- To rehearse, run the workflow by hand from the Actions tab with **dry run**
+  checked. That runs every check and packs the tarball without publishing.
 
-1. Update `CHANGELOG.md` and bump `version` in `package.json`, and merge that to `main`.
-2. Tag the merge commit and push the tag:
-
-   ```bash
-   git checkout main && git pull
-   git tag -a v0.x.y -m "v0.x.y"
-   git push origin v0.x.y
-   ```
-
-The pre-push hook then:
-- checks the tag matches `package.json`
-- checks out exactly the tagged commit in a throwaway worktree
-- runs lint, and then `prepublishOnly` (build, typecheck, tests)
-- runs `npm publish`, which may ask you to approve in the browser
-
-If any step fails, the push is aborted, so a tag reaches GitHub only once its
-version is on npm. Pushing a tag whose version is already on npm skips the
-publish.
-
-- Rehearse without publishing: `XPLANT_RELEASE_DRY_RUN=1 git push origin v0.x.y`
-  runs every check and then stops the push.
-- Push a tag without publishing: `SKIP_NPM_PUBLISH=1 git push …`.
-
-Versions published this way carry no npm provenance attestation, because npm
-only attaches one when the package is built in a supported CI system. To go
-back to publishing from CI, re-enable the workflow (`gh workflow enable
-publish.yml`). npm's trusted-publisher record for the package must name this
-repository (`shmaplex/xplant_sdk`) and `publish.yml`.
+The workflow authenticates with OIDC. npm's trusted-publisher record for the
+package names this repository (`shmaplex/xplant_sdk`) and the file
+`publish.yml`, so don't rename it.

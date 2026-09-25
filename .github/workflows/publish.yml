@@ -1,18 +1,37 @@
 name: Publish to npm
 
+# Releases happen by merging a version bump to main. When package.json on main
+# names a version npm does not have yet, this publishes it with provenance, then
+# tags the commit v<version> and creates the GitHub Release from CHANGELOG.md.
+# Any other push to main finds the version already published and stops.
+#
+# Publishing uses npm trusted publishing (OIDC). npm's trusted-publisher record
+# for the package names this repository and this file, publish.yml, so the
+# file must keep this name. No npm token is stored anywhere.
+
 on:
   push:
-    tags:
-      - "v*.*.*"
+    branches: [main]
+    paths: [package.json]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run every check and pack the tarball, but publish nothing"
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
 
 jobs:
   publish:
-    name: Build and publish @shmaplex/xplant-sdk
+    name: Publish @shmaplex/xplant-sdk
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write  # create GitHub Release
-      id-token: write  # OIDC trusted publishing — no stored npm token needed
+      contents: write # push the release tag and create the GitHub Release
+      id-token: write # OIDC for trusted publishing and provenance
 
     steps:
       - uses: actions/checkout@v4
@@ -20,31 +39,81 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org
           cache: npm
 
+      - name: Decide whether this version needs publishing
+        id: version
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          {
+            echo "name=$name"
+            echo "version=$version"
+            # A prerelease (0.5.0-rc.1) goes out under `next`, never `latest`.
+            case "$version" in *-*) echo "dist_tag=next" ;; *) echo "dist_tag=latest" ;; esac
+          } >> "$GITHUB_OUTPUT"
+          if [ "$(npm view "$name@$version" version 2>/dev/null || true)" = "$version" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "$name@$version is already on npm — nothing to release." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require a dated CHANGELOG entry for this version
+        if: steps.version.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node -e '
+            const v = process.env.VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const log = require("fs").readFileSync("CHANGELOG.md", "utf8");
+            const m = log.match(new RegExp("^## \\[" + v + "\\] — (\\S+)", "m"));
+            if (!m || !/^\d{4}-\d{2}-\d{2}$/.test(m[1])) {
+              console.error(`CHANGELOG.md needs "## [${process.env.VERSION}] — YYYY-MM-DD" before this can publish.`);
+              process.exit(1);
+            }
+            const body = log.slice(m.index).split(/^## \[/m)[1].split("\n").slice(1).join("\n").trim();
+            require("fs").writeFileSync("release-notes.md", body + "\n\n**Install:** `npm install " +
+              require("./package.json").name + "@" + process.env.VERSION + "`\n");
+          '
+
       - name: Install dependencies
+        if: steps.version.outputs.publish == 'true'
         run: npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Lint
+        if: steps.version.outputs.publish == 'true'
+        run: npm run lint
 
-      - name: Test
-        run: npm test
-
-      - name: Build
-        run: npm run build
-
-      # Tokenless trusted publishing needs npm 11.5.1+. Node 20 ships npm 10,
-      # which would fall back to a stored token and fail without one.
+      # Tokenless trusted publishing needs npm 11.5.1+. Node 22 ships npm 10.
       - name: Use an npm that supports trusted publishing
+        if: steps.version.outputs.publish == 'true'
         run: npm install -g npm@^11.5.1
 
+      # prepublishOnly builds, typechecks and tests before anything is uploaded.
       - name: Publish to npm
-        run: npm publish --access public --provenance
+        if: steps.version.outputs.publish == 'true'
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+          DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            npm publish --access public --tag "$DIST_TAG" --dry-run
+          else
+            npm publish --access public --tag "$DIST_TAG" --provenance
+          fi
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
+      - name: Tag the release and create the GitHub Release
+        if: steps.version.outputs.publish == 'true' && !inputs.dry_run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: |
+          prerelease=""; latest="--latest"
+          if [ "$DIST_TAG" = "next" ]; then prerelease="--prerelease"; latest="--latest=false"; fi
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" \
+            --notes-file release-notes.md $prerelease $latest
+          echo "Published ${{ steps.version.outputs.name }}@$VERSION ($DIST_TAG) and released v$VERSION." >> "$GITHUB_STEP_SUMMARY"
