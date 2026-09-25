@@ -561,7 +561,9 @@ const detail = await client.sopRuns.get(run.id);
 ```
 
 Evidence is append-only. A protocol with no version in force answers
-`409 SOP_RUN_NOT_EFFECTIVE`; a completed run answers `409 SOP_RUN_CLOSED`.
+`409 SOP_RUN_NOT_EFFECTIVE`. A run that has ended (completed, failed,
+cancelled or archived) answers `409 SOP_RUN_CLOSED`, and a step that isn't in
+the version the run follows answers `404 NOT_FOUND`.
 
 ### `client.labels` — scanning
 
@@ -620,6 +622,7 @@ await client.devices.recordEvent({
   device_id: registered.id,
   event_type: "alert",     // heartbeat | alert | firmware_update | config_change | error | other
   payload: { message: "Humidity sensor not responding" },
+  external_id: "shelf-3-alert-0142", // optional: a retried event is stored once
 });
 ```
 
@@ -631,7 +634,7 @@ no devices.
 
 ```typescript
 // POST /api/v1/sensor-readings — device token, or write:sensor_readings.
-// Resolves with the stored reading, or null if it duplicated one already stored.
+// Resolves with the stored reading — or, for a duplicate, the reading already stored.
 await device.sensorReadings.create({
   device_id: "device-uuid",
   type: "temperature",     // temperature | humidity | ph | co2 | light | other
@@ -976,7 +979,7 @@ own `signal` rejects with the signal's reason instead.
 | 404 | `NOT_FOUND` | Not found, in another workspace, or a malformed id; the API does not distinguish |
 | 409 | `IDEMPOTENCY_IN_FLIGHT` | A request with this `Idempotency-Key` is still running; retry shortly |
 | 422 | `INVALID_CURSOR` | The cursor is malformed, from another endpoint, or used with other filters; start from the first page |
-| 409 | `SOP_RUN_NOT_EFFECTIVE`, `SOP_RUN_CLOSED` | The SOP has no version in force; the run is complete |
+| 409 | `SOP_RUN_NOT_EFFECTIVE`, `SOP_RUN_CLOSED` | The SOP has no version in force; the run has ended |
 | 409 | `DEVICE_INGEST_DISABLED` | A device in the batch is paused or retired |
 | 409 | `DUPLICATE_ENTRY` | The `external_id` is already in use |
 | 413 | `PAYLOAD_TOO_LARGE` | The uploaded file is too large |
@@ -1070,9 +1073,12 @@ These endpoints honour it:
 | `POST /api/v1/label-scans` | `labels.recordScan` |
 | `POST /api/v1/equipment/{id}/events` | `equipment.recordEvent` |
 
-Every other endpoint ignores the header. Sensor readings dedupe on
-`external_id` and `recorded_at` instead — see
-[`client.sensorReadings`](#clientsensorreadings).
+Every other endpoint ignores the header. Two dedupe on your own id instead:
+- sensor readings on `external_id` and `recorded_at` — see
+  [`client.sensorReadings`](#clientsensorreadings);
+- device events on `external_id`.
+
+A repeat resolves with the record already stored, and nothing new is written.
 
 Pass a key on any write:
 

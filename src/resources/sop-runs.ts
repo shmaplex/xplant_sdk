@@ -61,9 +61,10 @@ export class SopRunsResource {
    * Post a confirmation, scan, skip, note or device state against one step.
    * Requires the `write:sop_steps` scope.
    *
-   * Append-only: a correction is another event. A completed run takes no more
-   * evidence and answers `409 SOP_RUN_CLOSED`. Safe to retry with an
-   * `Idempotency-Key`.
+   * Append-only: a correction is another event. A run that has ended —
+   * completed, failed, cancelled or archived — takes no more evidence and
+   * answers `409 SOP_RUN_CLOSED`. A step that is not in the version the run
+   * follows answers `404 NOT_FOUND`. Safe to retry with an `Idempotency-Key`.
    *
    * @example
    * await client.sopRuns.recordStepEvent(runId, "step-3", {
@@ -92,7 +93,8 @@ export class SopRunsResource {
    * Requires the `write:sop_steps` scope.
    *
    * `unit` is required: there is no default, because a default would be an
-   * assumption written down. Safe to retry with an `Idempotency-Key`.
+   * assumption written down. The same `404` and `409 SOP_RUN_CLOSED` rules as
+   * {@link recordStepEvent} apply. Safe to retry with an `Idempotency-Key`.
    *
    * @example
    * await client.sopRuns.recordMeasurement(runId, "step-4", {

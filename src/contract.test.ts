@@ -556,20 +556,36 @@ describe("the SDK sends what the routes read", () => {
     });
   });
 
-  it("returns null for a single reading the API recognised as a duplicate", async () => {
+  it("resolves a duplicate single reading with the reading already stored", async () => {
     // A resent reading (same device, external_id and recorded_at) is stored
-    // once; the repeat answers { ok: true } with no data.
-    const duplicate = (() =>
-      Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 201 }))) as unknown as typeof fetch;
-    const stored = await client({ fetch: duplicate }).sensorReadings.create({
+    // once. The API answers the repeat with the stored reading and
+    // meta.duplicate; older versions answered { ok: true } with no data.
+    const reading = {
       device_id: DEVICE_ID,
-      type: "ph",
+      type: "ph" as const,
       value: 5.8,
       unit: "pH",
       recorded_at: "2026-09-25T00:00:00Z",
       external_id: "gw1-ph-20260925T0000",
+    };
+    const answer = (body: unknown) =>
+      (() => Promise.resolve(new Response(JSON.stringify(body), { status: 201 }))) as unknown as typeof fetch;
+
+    const stored = { id: "r1", ...reading };
+    await expect(
+      client({ fetch: answer({ ok: true, data: stored, meta: { duplicate: true } }) }).sensorReadings.create(reading),
+    ).resolves.toEqual(stored);
+    await expect(client({ fetch: answer({ ok: true }) }).sensorReadings.create(reading)).resolves.toBeNull();
+  });
+
+  it("sends a device event's external_id so a retry is stored once", async () => {
+    const server = fakeXPlant();
+    await client({ fetch: server.fetch }).devices.recordEvent({
+      device_id: DEVICE_ID,
+      event_type: "alert",
+      external_id: "shelf-3-alert-0142",
     });
-    expect(stored).toBeNull();
+    expect(server.calls[0].body).toMatchObject({ external_id: "shelf-3-alert-0142" });
   });
 
   it("hands back plants.create()'s warning when the first stage could not be set", async () => {

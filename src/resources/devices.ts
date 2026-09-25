@@ -125,11 +125,16 @@ export class DevicesResource {
    * Accepts a device token for the event's device, or a workspace key with the
    * `write:device_events` scope.
    *
+   * Give each event an `external_id` and a retry after a network failure
+   * records it once: a repeat resolves with the event already stored. (The
+   * envelope's `meta.duplicate` marks a repeat, via `client.requestEnvelope()`.)
+   *
    * @example
    * await device.devices.recordEvent({
    *   device_id: deviceId,
    *   event_type: "alert",
    *   payload: { message: "Humidity sensor not responding" },
+   *   external_id: `${deviceId}-alert-${Date.now()}`,
    * });
    */
   async recordEvent(payload: DeviceEventPayload, options?: WriteOptions): Promise<DeviceEvent> {

@@ -920,6 +920,12 @@ export interface DeviceEventPayload {
   payload?: Record<string, unknown>;
   /** ISO 8601. Defaults to server receipt time if omitted. */
   occurred_at?: string;
+  /**
+   * Your own id for the event, 1–200 characters. An event with the same device
+   * and `external_id` as one already stored is not recorded again — the stored
+   * event is returned instead — so a retried request records the event once.
+   */
+  external_id?: string;
 }
 
 /** A device event as returned by the API. */

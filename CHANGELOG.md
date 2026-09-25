@@ -13,6 +13,23 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-09-25
+
+### Added
+- `DeviceEventPayload.external_id`. A repeated event for the same device and
+  `external_id` is stored once, and `devices.recordEvent()` resolves with the
+  event already stored.
+
+### Changed
+- `sensorReadings.create()` resolves with the stored reading for a duplicate
+  too, since the API now returns it along with `meta.duplicate`. It still
+  resolves as `null` against older API versions, which returned no data.
+- Docs:
+  - SOP step evidence against a step that isn't in the run's version answers
+    `404`.
+  - `409 SOP_RUN_CLOSED` now covers every ended run: completed, failed,
+    cancelled or archived.
+
 ## [0.6.0] — 2026-09-25
 
 Every list now pages by cursor, and every response carries a request id.
