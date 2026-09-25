@@ -36,7 +36,9 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   resolves as `null` against older API versions, which returned no data.
 - Docs:
   - `stages.advance()` takes a stage from the lab's own stage list, returns
-    its key, and answers 422 for a stage the lab doesn't use.
+    its key, and answers 422 for a stage the lab doesn't use. Moving a
+    teammate's culture needs its creator or a manager (the new
+    `403 STAGE_WRITE_FORBIDDEN` code).
   - Transfers and stage moves appear in `events.list()` as `transfer` and
     `stage_change` events.
   - SOP step evidence against a step that isn't in the run's version answers

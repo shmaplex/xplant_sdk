@@ -48,8 +48,9 @@ export class StagesResource {
    * `stage` must be in the lab's own stage list for plants or explants; the
    * result carries the stage's key (`"Multiplication"` comes back as
    * `"multiplication"`). A stage the lab doesn't use answers
-   * `422 VALIDATION_ERROR`. Each move also appears in `events.list()` as a
-   * `stage_change` event.
+   * `422 VALIDATION_ERROR`. Moving a teammate's plant or explant needs its
+   * creator or a manager, or answers `403 STAGE_WRITE_FORBIDDEN`. Each move
+   * also appears in `events.list()` as a `stage_change` event.
    *
    * @example
    * await client.stages.advance({

@@ -48,6 +48,8 @@ export type XPlantErrorCode =
   | "PLANT_WRITE_FORBIDDEN"
   /** 403 — editing a teammate's explant needs its creator or a manager. */
   | "EXPLANT_WRITE_FORBIDDEN"
+  /** 403 — moving a teammate's plant or explant to a new stage needs its creator or a manager. */
+  | "STAGE_WRITE_FORBIDDEN"
   /** 403 — only a recipe's author can edit it. */
   | "MEDIA_RECIPE_NOT_OWNER"
   /** 413 — the uploaded file is too large. */
