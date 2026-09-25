@@ -77,6 +77,8 @@ and edge or serverless functions.
 
 ## Plans and access
 
+> Full guide: [Authentication and plans](https://docs.xplantpro.com/docs/authentication#plans-and-access)
+
 **Your key can never do more than you can in xPlant.** It unlocks what your
 plan includes, and what your role allows.
 
@@ -182,6 +184,8 @@ and `{ signal, timeout, idempotencyKey }` for writes.
 
 ## Authentication and scopes
 
+> Full guide: [Scopes](https://docs.xplantpro.com/docs/scopes)
+
 Every request carries a bearer credential. There are two kinds:
 
 | Credential | Prefix | Can do | Where it belongs |
@@ -273,6 +277,8 @@ envelope.meta; // Record<string, unknown> | undefined
 ---
 
 ## Resources
+
+> Every endpoint, with its request and response: [API reference](https://docs.xplantpro.com/docs/api)
 
 Each heading gives the endpoint and the scope it needs. The examples assume a
 `client` built with a workspace key, or a `device` built with a device token.
@@ -858,6 +864,8 @@ added up across currencies.
 
 ## Paging
 
+> Full guide: [Pagination](https://docs.xplantpro.com/docs/pagination)
+
 Every list method that pages returns a `ListPromise`. Await it for one page, or
 iterate it for everything:
 
@@ -910,6 +918,8 @@ skipped or seen twice. Key what you store by `id`.
 ---
 
 ## Errors
+
+> Full guide: [Errors](https://docs.xplantpro.com/docs/errors)
 
 Every API failure throws an `XPlantError`:
 
@@ -985,6 +995,8 @@ over time, and the status class is the part that never changes meaning.
 
 ## Rate limits and retries
 
+> Full guide: [Rate limits](https://docs.xplantpro.com/docs/rate-limits)
+
 Every request counts against two per-minute budgets: **1,000 requests per API
 key** and **3,000 per workspace** across all its keys. A device token has its
 own budget, so one noisy device cannot spend the lab's. Sensor readings also
@@ -1024,6 +1036,8 @@ like any other network failure.
 ---
 
 ## Idempotency
+
+> Full guide: [Idempotency](https://docs.xplantpro.com/docs/idempotency)
 
 Some writes accept an `Idempotency-Key` header: the API runs the write once per
 key and answers a repeat with the stored result for 24 hours. A device on a
@@ -1072,6 +1086,8 @@ call and reuses it across that call's attempts.
 ---
 
 ## Device tokens
+
+> Full guide: [Device tokens](https://docs.xplantpro.com/docs/device-tokens) · [Sensors and devices](https://docs.xplantpro.com/docs/guides/sensors-and-devices)
 
 A device token is bound to one registered device. It can post that device's
 sensor readings, events and heartbeat, and nothing else — it cannot read the
