@@ -48,12 +48,12 @@
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
-    "url": "https://github.com/shmaplex/xplant-sdk.git"
+    "url": "https://github.com/shmaplex/xplant_sdk.git"
   },
   "bugs": {
-    "url": "https://github.com/shmaplex/xplant-sdk/issues"
+    "url": "https://github.com/shmaplex/xplant_sdk/issues"
   },
-  "homepage": "https://github.com/shmaplex/xplant-sdk#readme",
+  "homepage": "https://github.com/shmaplex/xplant_sdk#readme",
   "engines": {
     "node": ">=18"
   }
