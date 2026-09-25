@@ -13,7 +13,7 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.3.0] — Unreleased
+## [0.3.0] — 2026-09-25
 
 Covers the whole `/api/v1` surface — all 34 route and method pairs — and adds
 device tokens, opt-in retries, idempotency keys and a paging helper. Pre-1.0.
