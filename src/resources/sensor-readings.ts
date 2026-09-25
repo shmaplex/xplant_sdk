@@ -37,6 +37,10 @@ export class SensorReadingsResource {
    * Prefer {@link createBatch} for anything that samples on a schedule: one
    * request per reading spends the rate limit many times faster.
    *
+   * Resolves with the stored reading, or `null` when it duplicates one already
+   * stored — same device, `external_id` and `recorded_at` — so nothing new was
+   * written.
+   *
    * @example
    * await device.sensorReadings.create({
    *   device_id: deviceId,
@@ -45,13 +49,16 @@ export class SensorReadingsResource {
    *   unit: "C",
    * });
    */
-  async create(payload: SensorReadingPayload, options?: WriteOptions): Promise<SensorReading> {
-    const { data } = await this.request<SensorReading>(
+  async create(
+    payload: SensorReadingPayload,
+    options?: WriteOptions,
+  ): Promise<SensorReading | null> {
+    const { data } = await this.request<SensorReading | undefined>(
       "/api/v1/sensor-readings",
       { method: "POST", body: JSON.stringify(toWire(payload)) },
       options,
     );
-    return data;
+    return data ?? null;
   }
 
   /**

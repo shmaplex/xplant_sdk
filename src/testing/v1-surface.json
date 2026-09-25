@@ -38,7 +38,7 @@
         "write:devices"
       ],
       "auth": "workspace_key",
-      "idempotent": false
+      "idempotent": true
     },
     {
       "path": "/api/v1/devices/{deviceId}/heartbeat",
@@ -61,6 +61,15 @@
     {
       "path": "/api/v1/devices/{deviceId}/tokens",
       "method": "POST",
+      "scopes": [
+        "write:devices"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/devices/{deviceId}/tokens/{tokenId}",
+      "method": "DELETE",
       "scopes": [
         "write:devices"
       ],
@@ -234,7 +243,7 @@
         "write:transfers"
       ],
       "auth": "workspace_key",
-      "idempotent": false
+      "idempotent": true
     },
     {
       "path": "/api/v1/tasks",
@@ -288,7 +297,7 @@
         "write:demand"
       ],
       "auth": "workspace_key",
-      "idempotent": false
+      "idempotent": true
     },
     {
       "path": "/api/v1/transfers",
@@ -306,7 +315,7 @@
         "write:transfers"
       ],
       "auth": "workspace_key",
-      "idempotent": false
+      "idempotent": true
     },
     {
       "path": "/api/v1/workspaces",

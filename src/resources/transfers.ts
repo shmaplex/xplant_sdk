@@ -59,7 +59,7 @@ export class TransfersResource {
     const { data } = await this.request<TransferSummary>(
       "/api/v1/transfers",
       { method: "POST", body: JSON.stringify(input) },
-      options,
+      { ...options, idempotent: true },
     );
     return data;
   }

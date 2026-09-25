@@ -13,6 +13,25 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] — Unreleased
+
+### Added
+- `devices.revokeToken(deviceId, tokenId)` — revoke one device token. It is
+  refused from its next request, and revoking twice is not an error.
+
+### Changed
+- `stages.advance()`, `transfers.create()`, `taskDemand.record()` and
+  `devices.register()` now replay a repeated `Idempotency-Key`, so with
+  `retry` on they are resent after a network failure like the other replaying
+  writes. Ten endpoints replay a key.
+- **Breaking (types):** `sensorReadings.create()` resolves to
+  `SensorReading | null`. The API answers a reading that duplicates one already
+  stored with no data, and the SDK used to return `undefined` typed as a
+  reading.
+- README: the idempotency table lists all ten endpoints, token revocation is
+  documented, and the note about older routes using non-standard error codes
+  is gone, now that those routes return standard codes.
+
 ## [0.3.0] — 2026-09-25
 
 Covers the whole `/api/v1` surface — all 34 route and method pairs — and adds
