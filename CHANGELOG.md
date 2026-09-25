@@ -13,6 +13,39 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-09-25
+
+### Added
+- **Training on SOP runs:**
+  - `sopRuns.start()` resolves to a `SopRunStarted`: the run, plus
+    `trainingWarning` (`{ qualification, expires_on }` or `null`) when the lab
+    warns on training or the owner's training lapses within 30 days.
+  - The new `TRAINING_REQUIRED` code (403) means the lab blocks untrained
+    operators.
+  - `SopRunStarted` extends `SopRun`, so existing code is unaffected.
+- `TransferCreateInput.status`: `"completed"` (the default) or `"pending"`, for
+  a transfer that is planned but not done. It comes with a `TransferStatus`
+  type. New transfers read `"completed"` where they used to read `"active"`.
+- `DeviceEventPayload.external_id`. A repeated event for the same device and
+  `external_id` is stored once, and `devices.recordEvent()` resolves with the
+  event already stored.
+
+### Changed
+- `sensorReadings.create()` resolves with the stored reading for a duplicate
+  too, since the API now returns it along with `meta.duplicate`. It still
+  resolves as `null` against older API versions, which returned no data.
+- Docs:
+  - `stages.advance()` takes a stage from the lab's own stage list, returns
+    its key, and answers 422 for a stage the lab doesn't use. Moving a
+    teammate's culture needs its creator or a manager (the new
+    `403 STAGE_WRITE_FORBIDDEN` code).
+  - Transfers and stage moves appear in `events.list()` as `transfer` and
+    `stage_change` events.
+  - SOP step evidence against a step that isn't in the run's version answers
+    `404`.
+  - `409 SOP_RUN_CLOSED` now covers every ended run: completed, failed,
+    cancelled or archived.
+
 ## [0.6.0] — 2026-09-25
 
 Every list now pages by cursor, and every response carries a request id.

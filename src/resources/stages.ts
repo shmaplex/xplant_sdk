@@ -45,6 +45,13 @@ export class StagesResource {
    * current stage, records the new one, and makes it current.
    * Requires the `write:transfers` scope.
    *
+   * `stage` must be in the lab's own stage list for plants or explants; the
+   * result carries the stage's key (`"Multiplication"` comes back as
+   * `"multiplication"`). A stage the lab doesn't use answers
+   * `422 VALIDATION_ERROR`. Moving a teammate's plant or explant needs its
+   * creator or a manager, or answers `403 STAGE_WRITE_FORBIDDEN`. Each move
+   * also appears in `events.list()` as a `stage_change` event.
+   *
    * @example
    * await client.stages.advance({
    *   explant_id: explantId,

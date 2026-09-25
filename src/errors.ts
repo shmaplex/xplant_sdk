@@ -28,7 +28,9 @@ export type XPlantErrorCode =
   | "INVALID_CURSOR"
   /** 409 — the SOP has no version in force, so it cannot be run. */
   | "SOP_RUN_NOT_EFFECTIVE"
-  /** 409 — the run is complete and takes no more evidence. */
+  /** 403 — the lab requires training on this SOP, and the key's owner isn't currently trained. */
+  | "TRAINING_REQUIRED"
+  /** 409 — the run has ended (completed, failed, cancelled or archived) and takes no more evidence. */
   | "SOP_RUN_CLOSED"
   /** 409 — a device in the batch is paused or retired. */
   | "DEVICE_INGEST_DISABLED"
@@ -46,6 +48,8 @@ export type XPlantErrorCode =
   | "PLANT_WRITE_FORBIDDEN"
   /** 403 — editing a teammate's explant needs its creator or a manager. */
   | "EXPLANT_WRITE_FORBIDDEN"
+  /** 403 — moving a teammate's plant or explant to a new stage needs its creator or a manager. */
+  | "STAGE_WRITE_FORBIDDEN"
   /** 403 — only a recipe's author can edit it. */
   | "MEDIA_RECIPE_NOT_OWNER"
   /** 413 — the uploaded file is too large. */

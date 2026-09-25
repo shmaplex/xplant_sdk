@@ -4,11 +4,22 @@ import type {
   SopMeasurementInput,
   SopRun,
   SopRunDetail,
+  SopRunStarted,
   SopRunStartInput,
   SopStepEvent,
   SopStepEventInput,
+  TrainingWarning,
   WriteOptions,
 } from "../types.js";
+
+/** Reads `meta.training_warning` without trusting its shape. */
+function readTrainingWarning(meta: Record<string, unknown> | undefined): TrainingWarning | null {
+  const warning = meta?.training_warning;
+  if (warning === null || typeof warning !== "object") return null;
+  const { qualification, expires_on } = warning as Record<string, unknown>;
+  if (typeof qualification !== "string") return null;
+  return { qualification, expires_on: typeof expires_on === "string" ? expires_on : null };
+}
 
 function stepPath(runId: string, stepId: string, kind: "events" | "measurements"): string {
   return `/api/v1/sop-runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepId)}/${kind}`;
@@ -25,18 +36,26 @@ export class SopRunsResource {
    * and that is the version the lab has in force. A protocol with none cannot
    * be run and answers `409 SOP_RUN_NOT_EFFECTIVE`.
    *
+   * Training: when the lab blocks on it and the key's owner isn't currently
+   * trained on the SOP, this answers `403 TRAINING_REQUIRED`. When the lab only
+   * warns — or the owner's training lapses within 30 days — the run starts and
+   * `trainingWarning` says why; show it to the operator.
+   *
    * Safe to retry with an `Idempotency-Key`.
    *
    * @example
    * const run = await client.sopRuns.start({ sop_id: sopId, batch_code: "B-2026-114" });
+   * if (run.trainingWarning) {
+   *   console.warn(`Training ${run.trainingWarning.qualification}`, run.trainingWarning.expires_on);
+   * }
    */
-  async start(input: SopRunStartInput, options?: WriteOptions): Promise<SopRun> {
-    const { data } = await this.request<SopRun>(
+  async start(input: SopRunStartInput, options?: WriteOptions): Promise<SopRunStarted> {
+    const { data, meta } = await this.request<SopRun>(
       "/api/v1/sop-runs",
       { method: "POST", body: JSON.stringify(input) },
       { ...options, idempotent: true },
     );
-    return data;
+    return { ...data, trainingWarning: readTrainingWarning(meta) };
   }
 
   /**
@@ -61,9 +80,10 @@ export class SopRunsResource {
    * Post a confirmation, scan, skip, note or device state against one step.
    * Requires the `write:sop_steps` scope.
    *
-   * Append-only: a correction is another event. A completed run takes no more
-   * evidence and answers `409 SOP_RUN_CLOSED`. Safe to retry with an
-   * `Idempotency-Key`.
+   * Append-only: a correction is another event. A run that has ended —
+   * completed, failed, cancelled or archived — takes no more evidence and
+   * answers `409 SOP_RUN_CLOSED`. A step that is not in the version the run
+   * follows answers `404 NOT_FOUND`. Safe to retry with an `Idempotency-Key`.
    *
    * @example
    * await client.sopRuns.recordStepEvent(runId, "step-3", {
@@ -92,7 +112,8 @@ export class SopRunsResource {
    * Requires the `write:sop_steps` scope.
    *
    * `unit` is required: there is no default, because a default would be an
-   * assumption written down. Safe to retry with an `Idempotency-Key`.
+   * assumption written down. The same `404` and `409 SOP_RUN_CLOSED` rules as
+   * {@link recordStepEvent} apply. Safe to retry with an `Idempotency-Key`.
    *
    * @example
    * await client.sopRuns.recordMeasurement(runId, "step-4", {

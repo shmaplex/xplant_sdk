@@ -412,7 +412,10 @@ export interface StageSummary {
   id: string;
   entity_type: EntityType;
   entity_id: string;
-  /** Stage name, e.g. `"multiplication"`. */
+  /**
+   * The stage's key in the lab's stage list, e.g. `"multiplication"` — the
+   * key, whatever casing was sent.
+   */
   stage: string;
   /** `"active"` for the current stage, `"completed"` once superseded. */
   status: string;
@@ -428,7 +431,12 @@ export type StageListParams = EntityTarget & PageParams;
 
 /** Payload sent when advancing a plant or explant to a new stage. */
 export type StageAdvanceInput = EntityTarget & {
-  /** 1–50 characters. */
+  /**
+   * A stage from the lab's own stage list for plants or explants, 1–50
+   * characters. Matched against the list's names and keys. A stage the lab
+   * doesn't use — or an explant-only stage sent for a plant — answers
+   * `422 VALIDATION_ERROR`.
+   */
   stage: string;
   /** `YYYY-MM-DD` or a full ISO timestamp. Defaults to today. */
   entered_on?: string;
@@ -450,10 +458,14 @@ export interface TransferSummary {
   transfer_cycle: number | null;
   from_location: string | null;
   to_location: string | null;
-  status: string;
+  /** `"completed"` or `"pending"` for transfers recorded now; older ones may read `"active"`. */
+  status: TransferStatus | (string & {});
   notes: string | null;
   created_at: string | null;
 }
+
+/** Whether a transfer has happened (`completed`) or is planned (`pending`). */
+export type TransferStatus = "completed" | "pending";
 
 /** Target and paging accepted by `transfers.list()`. */
 export type TransferListParams = EntityTarget & PageParams;
@@ -470,6 +482,8 @@ export type TransferCreateInput = EntityTarget & {
   transfer_cycle?: number;
   /** Up to 5000 characters. */
   notes?: string;
+  /** Defaults to `"completed"`. */
+  status?: TransferStatus;
 };
 
 // ---------------------------------------------------------------------------
@@ -732,6 +746,30 @@ export interface SopRunDetail extends SopRun {
   events: SopStepEvent[];
 }
 
+/**
+ * Where the key owner's training on an SOP stands, sent when the lab enforces
+ * training as a warning or when training lapses within 30 days.
+ */
+export interface TrainingWarning {
+  /**
+   * `untrained` — no training recorded; `expired` — it has lapsed; `revoked` —
+   * it was withdrawn; `expiring` — current, but lapses within 30 days.
+   */
+  qualification: "untrained" | "expired" | "revoked" | "expiring" | (string & {});
+  /** `YYYY-MM-DD` for `expired` and `expiring`; `null` otherwise. */
+  expires_on: string | null;
+}
+
+/** Returned by `sopRuns.start()`: the run, plus any training warning. */
+export interface SopRunStarted extends SopRun {
+  /**
+   * Set when the lab warns rather than blocks on training, or the owner's
+   * training lapses within 30 days — `null` otherwise. Added by the SDK from
+   * the response's `meta`; show it to the operator.
+   */
+  trainingWarning: TrainingWarning | null;
+}
+
 /** Payload sent when starting a run. The effective version is always pinned. */
 export interface SopRunStartInput {
   sop_id: string;
@@ -920,6 +958,12 @@ export interface DeviceEventPayload {
   payload?: Record<string, unknown>;
   /** ISO 8601. Defaults to server receipt time if omitted. */
   occurred_at?: string;
+  /**
+   * Your own id for the event, 1–200 characters. An event with the same device
+   * and `external_id` as one already stored is not recorded again — the stored
+   * event is returned instead — so a retried request records the event once.
+   */
+  external_id?: string;
 }
 
 /** A device event as returned by the API. */

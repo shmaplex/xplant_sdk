@@ -38,9 +38,11 @@ export class SensorReadingsResource {
    * Prefer {@link createBatch} for anything that samples on a schedule: one
    * request per reading spends the rate limit many times faster.
    *
-   * Resolves with the stored reading, or `null` when it duplicates one already
-   * stored — same device, `external_id` and `recorded_at` — so nothing new was
-   * written.
+   * Resolves with the stored reading. A reading that duplicates one already
+   * stored — same device, `external_id` and `recorded_at` — writes nothing and
+   * resolves with the reading already stored; the envelope's `meta.duplicate`
+   * marks it (via `client.requestEnvelope()`). Older API versions answered a
+   * duplicate with no data, which resolves as `null`.
    *
    * @example
    * await device.sensorReadings.create({

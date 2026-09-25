@@ -381,6 +381,8 @@ Pass exactly one of `plant_id` or `explant_id`.
 const history = await client.stages.list({ explant_id: "explant-uuid" });
 
 // POST /api/v1/stages — write:transfers. Completes the current stage and starts the new one.
+// `stage` must be in the lab's stage list; the result carries its key ("Rooting" → "rooting").
+// A teammate's culture needs its creator or a manager (403 STAGE_WRITE_FORBIDDEN).
 const stage = await client.stages.advance({
   explant_id: "explant-uuid",
   stage: "rooting",
@@ -401,9 +403,13 @@ await client.transfers.create({
   explant_id: "explant-uuid",
   to_location: "Shelf 3",
   notes: "Clean, no browning",
+  status: "completed",   // completed (the default) | pending, for a planned transfer
   // transfer_cycle continues from the last recorded cycle unless you set it
 });
 ```
+
+Every transfer and stage move also appears in `events.list()`, as `transfer`
+and `stage_change` events, so one delta feed covers them.
 
 ### `client.events` — change history
 
@@ -542,6 +548,10 @@ approved version that has not taken effect. It is `null` when there is none.
 ```typescript
 // POST /api/v1/sop-runs — write:sop_runs. Always pinned to the version in force.
 const run = await client.sopRuns.start({ sop_id: "sop-uuid", batch_code: "B-2026-114" });
+if (run.trainingWarning) {
+  // untrained | expired | revoked | expiring — show it to the operator
+  console.warn("Training", run.trainingWarning.qualification, run.trainingWarning.expires_on);
+}
 
 // POST /api/v1/sop-runs/{id}/steps/{stepId}/events — write:sop_steps
 await client.sopRuns.recordStepEvent(run.id, "step-3", {
@@ -560,8 +570,15 @@ await client.sopRuns.recordMeasurement(run.id, "step-4", {
 const detail = await client.sopRuns.get(run.id);
 ```
 
+If the lab requires training on an SOP, `start()` answers
+`403 TRAINING_REQUIRED` when the key's owner isn't currently trained. If the
+lab only warns — or the owner's training lapses within 30 days — the run starts
+and `run.trainingWarning` says why.
+
 Evidence is append-only. A protocol with no version in force answers
-`409 SOP_RUN_NOT_EFFECTIVE`; a completed run answers `409 SOP_RUN_CLOSED`.
+`409 SOP_RUN_NOT_EFFECTIVE`. A run that has ended (completed, failed,
+cancelled or archived) answers `409 SOP_RUN_CLOSED`, and a step that isn't in
+the version the run follows answers `404 NOT_FOUND`.
 
 ### `client.labels` — scanning
 
@@ -620,6 +637,7 @@ await client.devices.recordEvent({
   device_id: registered.id,
   event_type: "alert",     // heartbeat | alert | firmware_update | config_change | error | other
   payload: { message: "Humidity sensor not responding" },
+  external_id: "shelf-3-alert-0142", // optional: a retried event is stored once
 });
 ```
 
@@ -631,7 +649,7 @@ no devices.
 
 ```typescript
 // POST /api/v1/sensor-readings — device token, or write:sensor_readings.
-// Resolves with the stored reading, or null if it duplicated one already stored.
+// Resolves with the stored reading — or, for a duplicate, the reading already stored.
 await device.sensorReadings.create({
   device_id: "device-uuid",
   type: "temperature",     // temperature | humidity | ph | co2 | light | other
@@ -969,14 +987,15 @@ own `signal` rejects with the signal's reason instead.
 | 402 | `PLAN_LIMIT_REACHED` | The workspace has reached a record limit its plan sets |
 | 402 | `DEVICE_LIMIT_REACHED` | The workspace has connected every device its plan includes |
 | 403 | `FORBIDDEN` | The key lacks the scope, or its owner's role can't use it; the message names which |
-| 403 | `PLANT_WRITE_FORBIDDEN`, `EXPLANT_WRITE_FORBIDDEN` | Editing a teammate's record needs its creator or a manager |
+| 403 | `PLANT_WRITE_FORBIDDEN`, `EXPLANT_WRITE_FORBIDDEN`, `STAGE_WRITE_FORBIDDEN` | Editing, or moving the stage of, a teammate's record needs its creator or a manager |
 | 403 | `MEDIA_RECIPE_NOT_OWNER` | Only a recipe's author can edit it |
+| 403 | `TRAINING_REQUIRED` | The lab requires training on this SOP, and the key's owner isn't currently trained |
 | 403 | `DEVICE_TOKEN_NOT_ACCEPTED` | A device token was sent to an endpoint that needs a workspace key |
 | 403 | `DEVICE_TOKEN_WRONG_DEVICE` | A device token tried to write about another device |
 | 404 | `NOT_FOUND` | Not found, in another workspace, or a malformed id; the API does not distinguish |
 | 409 | `IDEMPOTENCY_IN_FLIGHT` | A request with this `Idempotency-Key` is still running; retry shortly |
 | 422 | `INVALID_CURSOR` | The cursor is malformed, from another endpoint, or used with other filters; start from the first page |
-| 409 | `SOP_RUN_NOT_EFFECTIVE`, `SOP_RUN_CLOSED` | The SOP has no version in force; the run is complete |
+| 409 | `SOP_RUN_NOT_EFFECTIVE`, `SOP_RUN_CLOSED` | The SOP has no version in force; the run has ended |
 | 409 | `DEVICE_INGEST_DISABLED` | A device in the batch is paused or retired |
 | 409 | `DUPLICATE_ENTRY` | The `external_id` is already in use |
 | 413 | `PAYLOAD_TOO_LARGE` | The uploaded file is too large |
@@ -1070,9 +1089,12 @@ These endpoints honour it:
 | `POST /api/v1/label-scans` | `labels.recordScan` |
 | `POST /api/v1/equipment/{id}/events` | `equipment.recordEvent` |
 
-Every other endpoint ignores the header. Sensor readings dedupe on
-`external_id` and `recorded_at` instead — see
-[`client.sensorReadings`](#clientsensorreadings).
+Every other endpoint ignores the header. Two dedupe on your own id instead:
+- sensor readings on `external_id` and `recorded_at` — see
+  [`client.sensorReadings`](#clientsensorreadings);
+- device events on `external_id`.
+
+A repeat resolves with the record already stored, and nothing new is written.
 
 Pass a key on any write:
 

@@ -97,7 +97,7 @@ const INVOCATIONS: Invocation[] = [
   {
     name: "transfers.create",
     expect: "POST /api/v1/transfers",
-    call: (c, o) => c.transfers.create({ explant_id: "e1", to_location: "Shelf 3" }, o),
+    call: (c, o) => c.transfers.create({ explant_id: "e1", to_location: "Shelf 3", status: "pending" }, o),
   },
   {
     name: "events.list",
@@ -556,20 +556,55 @@ describe("the SDK sends what the routes read", () => {
     });
   });
 
-  it("returns null for a single reading the API recognised as a duplicate", async () => {
+  it("resolves a duplicate single reading with the reading already stored", async () => {
     // A resent reading (same device, external_id and recorded_at) is stored
-    // once; the repeat answers { ok: true } with no data.
-    const duplicate = (() =>
-      Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 201 }))) as unknown as typeof fetch;
-    const stored = await client({ fetch: duplicate }).sensorReadings.create({
+    // once. The API answers the repeat with the stored reading and
+    // meta.duplicate; older versions answered { ok: true } with no data.
+    const reading = {
       device_id: DEVICE_ID,
-      type: "ph",
+      type: "ph" as const,
       value: 5.8,
       unit: "pH",
       recorded_at: "2026-09-25T00:00:00Z",
       external_id: "gw1-ph-20260925T0000",
+    };
+    const answer = (body: unknown) =>
+      (() => Promise.resolve(new Response(JSON.stringify(body), { status: 201 }))) as unknown as typeof fetch;
+
+    const stored = { id: "r1", ...reading };
+    await expect(
+      client({ fetch: answer({ ok: true, data: stored, meta: { duplicate: true } }) }).sensorReadings.create(reading),
+    ).resolves.toEqual(stored);
+    await expect(client({ fetch: answer({ ok: true }) }).sensorReadings.create(reading)).resolves.toBeNull();
+  });
+
+  it("sends a device event's external_id so a retry is stored once", async () => {
+    const server = fakeXPlant();
+    await client({ fetch: server.fetch }).devices.recordEvent({
+      device_id: DEVICE_ID,
+      event_type: "alert",
+      external_id: "shelf-3-alert-0142",
     });
-    expect(stored).toBeNull();
+    expect(server.calls[0].body).toMatchObject({ external_id: "shelf-3-alert-0142" });
+  });
+
+  it("hands back sopRuns.start()'s training warning, and null without one", async () => {
+    const answer = (meta?: unknown) =>
+      (() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ ok: true, data: { id: "run1" }, ...(meta ? { meta } : {}) }), {
+            status: 201,
+          }),
+        )) as unknown as typeof fetch;
+
+    const warned = await client({
+      fetch: answer({ training_warning: { qualification: "expiring", expires_on: "2026-10-20" } }),
+    }).sopRuns.start({ sop_id: "s1" });
+    expect(warned.id).toBe("run1");
+    expect(warned.trainingWarning).toEqual({ qualification: "expiring", expires_on: "2026-10-20" });
+
+    const plain = await client({ fetch: answer() }).sopRuns.start({ sop_id: "s1" });
+    expect(plain.trainingWarning).toBeNull();
   });
 
   it("hands back plants.create()'s warning when the first stage could not be set", async () => {
