@@ -452,6 +452,7 @@ const created = await client.tasks.create({
   title: "Subculture B-2026-114 — second pass",
   category: "transfer",        // media_prep | transfer | contamination | subculture
                                // | sop_review | acclimation | cleaning | monitoring | other
+                               // (a custom one: category "other" + category_label)
   priority: "high",            // low | medium | high | urgent
   workflow_status: "todo",     // backlog | todo | in_progress | waiting_blocked | review | done
   due_date: "2026-10-01T09:00:00+09:00", // ISO 8601 with an offset
@@ -505,6 +506,11 @@ await client.tasks.update(taskId, { priority_rank: 1500, release: true });
 `default` (never positioned), `auto` (set by an integration), or `manual` (set
 by a person). `priority_write` is `null` when the request attempted no ordering
 change. To remove a task's culture link, send `clear_entity_link: true`.
+
+For a category of your own, send `category: "other"` with a `category_label`
+(1–60 characters), e.g. `{ category: "other", category_label: "Grafting" }`.
+The label comes back on every task as `category_label`. Any other value outside
+the nine presets answers `400 TASK_CATEGORY_INVALID`.
 
 ### `client.taskDemand` — demand signals
 
@@ -981,6 +987,7 @@ own `signal` rejects with the signal's reason instead.
 | Status | `code` | Meaning |
 |---|---|---|
 | 400, 422 | `VALIDATION_ERROR` | The request failed validation; the message names the field |
+| 400 | `TASK_CATEGORY_INVALID` | The task category isn't a preset; use `"other"` with a `category_label` |
 | 401 | `UNAUTHORIZED` | No key, an unknown or revoked key or device token, or the key's owner left the workspace |
 | 402 | `PAID_PLAN_REQUIRED` | The plan doesn't include this part of the API — see [Plans and access](#plans-and-access) |
 | 402 | `FEATURE_NOT_INCLUDED` | The plan doesn't include this feature (e.g. pricing, calibration history) |

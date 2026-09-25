@@ -30,6 +30,8 @@ export type XPlantErrorCode =
   | "SOP_RUN_NOT_EFFECTIVE"
   /** 403 — the lab requires training on this SOP, and the key's owner isn't currently trained. */
   | "TRAINING_REQUIRED"
+  /** 400 — the task category is not one of the presets. Use `"other"` with a `category_label`. */
+  | "TASK_CATEGORY_INVALID"
   /** 409 — the run has ended (completed, failed, cancelled or archived) and takes no more evidence. */
   | "SOP_RUN_CLOSED"
   /** 409 — a device in the batch is paused or retired. */

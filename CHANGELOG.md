@@ -13,6 +13,18 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-09-26
+
+### Added
+- **Custom task categories.**
+  - `category_label` is accepted on `tasks.create()` and `tasks.update()`, and
+    returned on every task as `TaskSummary.category_label`.
+  - A category of your own is `category: "other"` plus a `category_label` of
+    1–60 characters. The label is allowed only beside `"other"`, and `null`
+    clears it.
+  - A category outside the nine presets answers the new
+    `400 TASK_CATEGORY_INVALID` code.
+
 ## [0.6.1] — 2026-09-25
 
 ### Added
