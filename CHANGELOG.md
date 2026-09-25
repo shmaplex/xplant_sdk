@@ -13,7 +13,7 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.4.0] — Unreleased
+## [0.4.0] — 2026-09-25
 
 ### Added
 - `devices.revokeToken(deviceId, tokenId)` — revoke one device token. It is
