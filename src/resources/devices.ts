@@ -1,5 +1,7 @@
 import type { EnvelopeRequestFn } from "../client.js";
 import { XPlantError } from "../errors.js";
+import { ListPromise } from "../list.js";
+import { toQuery } from "../query.js";
 import type {
   DeviceEvent,
   DeviceEventPayload,
@@ -10,6 +12,7 @@ import type {
   DeviceTokenMinted,
   DeviceTokenSummary,
   HeartbeatResponse,
+  PageParams,
   RequestOptions,
   WriteOptions,
 } from "../types.js";
@@ -73,35 +76,48 @@ export class DevicesResource {
   }
 
   /**
-   * List registered devices, newest first. This endpoint does not page.
+   * List registered devices, newest first, 200 per page by default.
    * Requires the `read:devices` scope.
    *
+   * Await it for the first page, or iterate it for every device — see
+   * {@link ListPromise}.
+   *
    * @example
-   * const devices = await client.devices.list();
+   * for await (const device of client.devices.list()) {
+   *   console.log(device.name, device.status, device.last_seen_at);
+   * }
    */
-  async list(options?: RequestOptions): Promise<DeviceSummary[]> {
-    const { data } = await this.request<DeviceSummary[]>("/api/v1/devices", {}, options);
-    return data;
+  list(params: PageParams = {}, options?: RequestOptions): ListPromise<DeviceSummary> {
+    return new ListPromise(
+      (page) =>
+        this.request<DeviceSummary[]>(
+          `/api/v1/devices${toQuery({ limit: page.limit, offset: page.offset, cursor: page.cursor })}`,
+          {},
+          options,
+        ),
+      params,
+      // The device list did not page before it paged by cursor, so a response
+      // without a cursor is the whole list — never re-request it by offset.
+      { offsetFallback: false },
+    );
   }
 
   /**
    * Fetch metadata for a registered device.
    * Requires the `read:devices` scope.
    *
-   * The API has no single-device route, so this lists the workspace's devices
-   * and selects one. Prefer `list()` when you need several. Throws
+   * The API has no single-device route, so this walks the workspace's devices
+   * and stops at the match. Prefer `list()` when you need several. Throws
    * {@link XPlantError} with status 404 when the id is not in the workspace.
    *
    * @example
    * const device = await client.devices.get(deviceId);
    */
   async get(deviceId: string, options?: RequestOptions): Promise<DeviceSummary> {
-    const devices = await this.list(options);
-    const device = devices.find((candidate) => candidate.id === deviceId);
-    if (!device) {
-      throw new XPlantError(404, "", "NOT_FOUND", "Device not found in this workspace");
+    for await (const device of this.list({ limit: 200 }, options)) {
+      if (device.id === deviceId) return device;
     }
-    return device;
+    throw new XPlantError(404, "", "NOT_FOUND", "Device not found in this workspace");
   }
 
   /**
@@ -181,15 +197,27 @@ export class DevicesResource {
 
   /**
    * List a device's tokens, newest first — prefixes, status and last use,
-   * never the secrets.
+   * never the secrets. 200 per page by default.
    * Requires a workspace key with the `read:devices` scope.
    *
    * @example
    * const tokens = await client.devices.listTokens(deviceId);
    * const stale = tokens.filter((t) => t.status === "active" && !t.lastUsedAt);
    */
-  async listTokens(deviceId: string, options?: RequestOptions): Promise<DeviceTokenSummary[]> {
-    const { data } = await this.request<DeviceTokenSummary[]>(tokensPath(deviceId), {}, options);
-    return data;
+  listTokens(
+    deviceId: string,
+    params: PageParams = {},
+    options?: RequestOptions,
+  ): ListPromise<DeviceTokenSummary> {
+    return new ListPromise(
+      (page) =>
+        this.request<DeviceTokenSummary[]>(
+          `${tokensPath(deviceId)}${toQuery({ limit: page.limit, offset: page.offset, cursor: page.cursor })}`,
+          {},
+          options,
+        ),
+      params,
+      { offsetFallback: false },
+    );
   }
 }

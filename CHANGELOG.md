@@ -13,6 +13,37 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-25
+
+Every list now pages by cursor, and every response carries a request id.
+
+### Changed
+- **`devices.list()` and `devices.listTokens()` page, 200 per page by
+  default.** They return a `ListPromise`: iterate it for every device or
+  token, or await it for the first page. Before, they returned every row in
+  one response.
+  - **Breaking:** the arguments are now `(params, options)`, and
+    `listTokens(deviceId, params, options)`. Pass `{ signal }` second rather
+    than first.
+- `devices.get()` searches every page, so it finds a device beyond the first
+  200.
+- **`sensorReadings.list()` pages by cursor** and returns a `ListPromise`. It
+  gains `until`, an inclusive upper bound; a `since` later than `until`
+  answers 422. You can now walk a whole time window instead of stopping at the
+  newest 1000 readings. The single-device shorthand `list(deviceId)` still
+  works.
+- Every older list (plants, explants, tasks, demand, events, stages,
+  transfers, sops) pages by cursor too. `ListPromise` already follows
+  `meta.next_cursor`, so code that iterates needs no change.
+
+### Added
+- `requestId` on every response: `envelope.requestId`, and `page.requestId` on
+  each page from `.pages()`. It joins `err.requestId` on errors. All three come
+  from the `X-Request-Id` header, which the API now sends on every response.
+- `ListPromiseOptions.offsetFallback`. Devices, device tokens and sensor
+  readings never paged by offset, so a response without a cursor is treated as
+  the only page rather than re-requested.
+
 ## [0.5.0] — 2026-09-25
 
 The rest of the `/api/v1` surface: all 58 endpoints now have a method.

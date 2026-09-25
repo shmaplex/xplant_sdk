@@ -10,7 +10,7 @@ export type { XPlantErrorCode, RateLimitInfo } from "./errors.js";
 export type { RetryOptions } from "./retry.js";
 
 export { ListPromise, MAX_PAGE_SIZE } from "./list.js";
-export type { ListPage } from "./list.js";
+export type { ListPage, ListPromiseOptions } from "./list.js";
 
 export { SensorReadingBuffer } from "./sensor-buffer.js";
 export type { SensorBufferOptions } from "./sensor-buffer.js";

@@ -222,6 +222,84 @@ describe("iterating a list by cursor", () => {
   });
 });
 
+/** A cursor-paged endpoint over pages of rows, with an X-Request-Id per response. */
+function pagedEndpoint(pages: Array<Array<{ id: string }>>, { cursors = true } = {}) {
+  const requests: URLSearchParams[] = [];
+  const fetchImpl = (input: string) => {
+    const query = new URL(input).searchParams;
+    requests.push(query);
+    // A paging bug re-requests forever; fail fast rather than exhaust memory.
+    if (requests.length > 20) return Promise.reject(new Error("runaway paging: over 20 requests"));
+    const index = query.get("cursor") ? Number(query.get("cursor")!.slice(1)) : 0;
+    const next = index + 1 < pages.length ? `c${index + 1}` : null;
+    const body = { ok: true, data: pages[index] ?? [], ...(cursors ? { meta: { next_cursor: next } } : {}) };
+    return Promise.resolve(
+      new Response(JSON.stringify(body), { headers: { "X-Request-Id": `req_${requests.length}` } }),
+    );
+  };
+  const client = new XPlantClient({
+    apiKey: "xpk_live_test",
+    baseUrl: "https://api.test",
+    fetch: fetchImpl as unknown as typeof fetch,
+  });
+  return { client, requests };
+}
+
+describe("lists that only page by cursor (devices, tokens, sensor readings)", () => {
+  const full = (n: number, prefix: string) => Array.from({ length: n }, (_, i) => ({ id: `${prefix}${i}` }));
+
+  it("treat a response without a cursor as the only page, even when it is full", async () => {
+    // Before these endpoints paged, a full list came back with no cursor.
+    // Re-requesting it by offset would repeat it forever.
+    const { client, requests } = pagedEndpoint([full(250, "d")], { cursors: false });
+
+    const devices = await collect(client.devices.list());
+
+    expect(devices).toHaveLength(250);
+    expect(requests).toHaveLength(1);
+  });
+
+  it("follow the cursor when the endpoint pages", async () => {
+    const { client, requests } = pagedEndpoint([full(200, "a"), full(200, "b"), full(5, "c")]);
+
+    expect(await collect(client.devices.list())).toHaveLength(405);
+    expect(requests.map((q) => q.get("cursor"))).toEqual([null, "c1", "c2"]);
+  });
+
+  it("find a device on a later page with devices.get()", async () => {
+    const { client, requests } = pagedEndpoint([full(200, "a"), [{ id: "target" }, { id: "other" }]]);
+
+    await expect(client.devices.get("target")).resolves.toEqual({ id: "target" });
+    expect(requests).toHaveLength(2);
+    expect(requests[0].get("limit")).toBe("200");
+  });
+
+  it("walk a sensor-reading window by cursor, passing since and until", async () => {
+    const { client, requests } = pagedEndpoint([full(3, "r"), full(2, "s")]);
+
+    const readings = await collect(
+      client.sensorReadings.list({ since: "2026-09-01T00:00:00Z", until: "2026-09-30T23:59:59Z", limit: 3 }),
+    );
+
+    expect(readings).toHaveLength(5);
+    expect(requests[0].get("since")).toBe("2026-09-01T00:00:00Z");
+    expect(requests[0].get("until")).toBe("2026-09-30T23:59:59Z");
+    expect(requests[1].get("cursor")).toBe("c1");
+    expect(requests.every((q) => q.get("offset") === null)).toBe(true);
+  });
+
+  it("page device tokens too", async () => {
+    const { client } = pagedEndpoint([full(200, "t"), full(1, "u")]);
+    expect(await collect(client.devices.listTokens("d1"))).toHaveLength(201);
+  });
+
+  it("put each response's X-Request-Id on its page", async () => {
+    const { client } = pagedEndpoint([full(2, "a"), full(1, "b")]);
+    const pages = await collect(client.devices.list().pages());
+    expect(pages.map((p) => p.requestId)).toEqual(["req_1", "req_2"]);
+  });
+});
+
 describe("ListPromise", () => {
   it("offers pages() for batch processing", async () => {
     const { client } = plantsApi(120);
@@ -250,6 +328,9 @@ describe("ListPromise", () => {
       client.pricing.listEvents(),
       client.commerce.listOrderLines(),
       client.commerce.getSellThrough(),
+      client.devices.list(),
+      client.devices.listTokens("d1"),
+      client.sensorReadings.list(),
     ]) {
       expect(list).toBeInstanceOf(ListPromise);
     }

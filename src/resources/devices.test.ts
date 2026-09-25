@@ -65,7 +65,7 @@ describe("devices", () => {
     const found = await client().devices.get("d2");
 
     // There is no single-device route, so this must hit the collection.
-    expect(calls[0].url).toBe("https://app.xplantpro.com/api/v1/devices");
+    expect(calls[0].url).toBe("https://app.xplantpro.com/api/v1/devices?limit=200");
     expect(found.id).toBe("d2");
   });
 
