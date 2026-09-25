@@ -48,6 +48,26 @@ const INVOCATIONS: Invocation[] = [
     call: (c) => c.plants.findByExternalId("LINE-0412"),
   },
   {
+    name: "plants.create",
+    expect: "POST /api/v1/plants",
+    call: (c, o) => c.plants.create({ species: "Alocasia zebrina", external_id: "LINE-0412" }, o),
+  },
+  {
+    name: "plants.update",
+    expect: "PATCH /api/v1/plants/{id}",
+    call: (c, o) => c.plants.update("p1", { status: "in_culture" }, o),
+  },
+  {
+    name: "explants.create",
+    expect: "POST /api/v1/explants",
+    call: (c, o) => c.explants.create({ label: "B-2026-114", plant_id: "p1" }, o),
+  },
+  {
+    name: "explants.update",
+    expect: "PATCH /api/v1/explants/{id}",
+    call: (c, o) => c.explants.update("e1", { status: "needs_subculture" }, o),
+  },
+  {
     name: "explants.list",
     expect: "GET /api/v1/explants",
     call: (c) => c.explants.list({ limit: 10 }),
@@ -219,6 +239,95 @@ const INVOCATIONS: Invocation[] = [
   },
 
   {
+    name: "contaminations.list",
+    expect: "GET /api/v1/contaminations",
+    call: (c) => c.contaminations.list({ status: "active" }),
+  },
+  {
+    name: "contaminations.get",
+    expect: "GET /api/v1/contaminations/{id}",
+    call: (c) => c.contaminations.get("x1"),
+  },
+  {
+    name: "contaminations.create",
+    expect: "POST /api/v1/contaminations",
+    call: (c, o) =>
+      c.contaminations.create({ explant_id: "e1", type: "fungal", issue: "White fuzz at the media line" }, o),
+  },
+  {
+    name: "comments.list",
+    expect: "GET /api/v1/comments",
+    call: (c) => c.comments.list({ entity_type: "explant", entity_id: "e1" }),
+  },
+  {
+    name: "comments.create",
+    expect: "POST /api/v1/comments",
+    call: (c, o) =>
+      c.comments.create({ entity_type: "explant", entity_id: "e1", body: "Moved to shelf 3" }, o),
+  },
+  {
+    name: "assets.list",
+    expect: "GET /api/v1/assets",
+    call: (c) => c.assets.list({ target: "explant", target_id: "e1" }),
+  },
+  { name: "assets.get", expect: "GET /api/v1/assets/{id}", call: (c) => c.assets.get("a1") },
+  {
+    name: "assets.create",
+    expect: "POST /api/v1/assets",
+    call: (c, o) =>
+      c.assets.create(
+        { target: "explant", target_id: "e1", image_url: "https://example.com/jar-12.jpg" },
+        o,
+      ),
+  },
+  { name: "mediaRecipes.list", expect: "GET /api/v1/media-recipes", call: (c) => c.mediaRecipes.list() },
+  {
+    name: "mediaRecipes.get",
+    expect: "GET /api/v1/media-recipes/{id}",
+    call: (c) => c.mediaRecipes.get("m1"),
+  },
+  {
+    name: "mediaRecipes.create",
+    expect: "POST /api/v1/media-recipes",
+    call: (c, o) =>
+      c.mediaRecipes.create(
+        { title: "MS + 2 mg/L BAP", components: [{ name: "MS basal salts", qty: "4.4", unit: "g/L" }] },
+        o,
+      ),
+  },
+  {
+    name: "mediaRecipes.update",
+    expect: "PATCH /api/v1/media-recipes/{id}",
+    call: (c, o) => c.mediaRecipes.update("m1", { status: "archived" }, o),
+  },
+  { name: "equipment.list", expect: "GET /api/v1/equipment", call: (c) => c.equipment.list() },
+  { name: "equipment.get", expect: "GET /api/v1/equipment/{id}", call: (c) => c.equipment.get("eq1") },
+  {
+    name: "equipment.listEvents",
+    expect: "GET /api/v1/equipment/{id}/events",
+    call: (c) => c.equipment.listEvents("eq1", { kind: "calibration" }),
+  },
+  {
+    name: "pricing.listCultureLines",
+    expect: "GET /api/v1/pricing/culture-lines",
+    call: (c) => c.pricing.listCultureLines(),
+  },
+  {
+    name: "pricing.listEvents",
+    expect: "GET /api/v1/pricing/events",
+    call: (c) => c.pricing.listEvents({ plant_id: "p1" }),
+  },
+  {
+    name: "commerce.listOrderLines",
+    expect: "GET /api/v1/commerce/order-lines",
+    call: (c) => c.commerce.listOrderLines({ from: "2026-09-01T00:00:00Z" }),
+  },
+  {
+    name: "commerce.getSellThrough",
+    expect: "GET /api/v1/commerce/sell-through",
+    call: (c) => c.commerce.getSellThrough({ from: "2026-07-01T00:00:00Z" }),
+  },
+  {
     // Not an endpoint of its own: a device-side queue that posts through
     // createBatch(). Closing it sends what was added.
     name: "sensorReadings.buffer",
@@ -233,7 +342,8 @@ const INVOCATIONS: Invocation[] = [
   {
     name: "equipment.recordEvent",
     expect: "POST /api/v1/equipment/{id}/events",
-    call: (c, o) => c.equipment.recordEvent("eq1", { kind: "calibration", outcome: "pass" }, o),
+    call: (c, o) =>
+      c.equipment.recordEvent("eq1", { kind: "calibration", outcome: "pass_after_adjustment" }, o),
   },
 ];
 
@@ -460,6 +570,24 @@ describe("the SDK sends what the routes read", () => {
       external_id: "gw1-ph-20260925T0000",
     });
     expect(stored).toBeNull();
+  });
+
+  it("hands back plants.create()'s warning when the first stage could not be set", async () => {
+    const partly = (() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            data: { id: "p1", name: "Alocasia zebrina" },
+            meta: { warning: "Plant saved, but its first stage could not be set." },
+          }),
+          { status: 201 },
+        ),
+      )) as unknown as typeof fetch;
+    const result = await client({ fetch: partly }).plants.create({ species: "Alocasia zebrina" });
+
+    expect(result.plant.id).toBe("p1");
+    expect(result.warning).toMatch(/first stage/);
   });
 
   it("refuses an empty or oversized batch before sending it", async () => {

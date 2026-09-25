@@ -1,7 +1,15 @@
 import type { EnvelopeRequestFn } from "../client.js";
 import { ListPromise } from "../list.js";
 import { toQuery } from "../query.js";
-import type { PlantListParams, PlantSummary, RequestOptions } from "../types.js";
+import type {
+  PlantCreateInput,
+  PlantCreateResult,
+  PlantListParams,
+  PlantSummary,
+  PlantUpdateInput,
+  RequestOptions,
+  WriteOptions,
+} from "../types.js";
 
 export class PlantsResource {
   constructor(private request: EnvelopeRequestFn) {}
@@ -55,6 +63,57 @@ export class PlantsResource {
     const { data } = await this.request<PlantSummary>(
       `/api/v1/plants/${encodeURIComponent(plantId)}`,
       {},
+      options,
+    );
+    return data;
+  }
+
+  /**
+   * Create a plant.
+   * Requires the `write:plants` scope.
+   *
+   * Safe to retry with an `Idempotency-Key`. An `external_id` already in use
+   * answers `409 DUPLICATE_ENTRY`; a workspace at its plan's plant limit
+   * answers `402 PLAN_LIMIT_REACHED`.
+   *
+   * Resolves with the plant and a `warning`, set only when the plant was saved
+   * but its first stage could not be — record one with `stages.advance()`.
+   *
+   * @example
+   * const { plant } = await client.plants.create({
+   *   species: "Alocasia zebrina",
+   *   external_id: "LINE-0412",
+   *   initial_stage: "Mother Block",
+   * });
+   */
+  async create(input: PlantCreateInput, options?: WriteOptions): Promise<PlantCreateResult> {
+    const { data, meta } = await this.request<PlantSummary>(
+      "/api/v1/plants",
+      { method: "POST", body: JSON.stringify(input) },
+      { ...options, idempotent: true },
+    );
+    const warning = meta?.warning;
+    return { plant: data, warning: typeof warning === "string" ? warning : null };
+  }
+
+  /**
+   * Update a plant. Only the fields you send change.
+   * Requires the `write:plants` scope.
+   *
+   * A teammate's plant needs its creator or a manager, or answers
+   * `403 PLANT_WRITE_FORBIDDEN`.
+   *
+   * @example
+   * await client.plants.update(plantId, { status: "in_culture", custom_fields: { tray: "B4" } });
+   */
+  async update(
+    plantId: string,
+    input: PlantUpdateInput,
+    options?: WriteOptions,
+  ): Promise<PlantSummary> {
+    const { data } = await this.request<PlantSummary>(
+      `/api/v1/plants/${encodeURIComponent(plantId)}`,
+      { method: "PATCH", body: JSON.stringify(input) },
       options,
     );
     return data;

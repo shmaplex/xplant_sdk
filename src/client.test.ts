@@ -58,6 +58,12 @@ describe("XPlantClient", () => {
       "devices",
       "sensorReadings",
       "equipment",
+      "contaminations",
+      "comments",
+      "assets",
+      "mediaRecipes",
+      "pricing",
+      "commerce",
     ] as const) {
       expect(client[name]).toBeDefined();
     }

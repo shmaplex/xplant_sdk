@@ -8,9 +8,9 @@
 export type XPlantErrorCode =
   /** 401 — no key, an unknown or revoked key, or a key whose owner left the workspace. */
   | "UNAUTHORIZED"
-  /** 403 — the key is valid but lacks the scope. The message names the scope. */
+  /** 403 — the key lacks the scope, or its owner's role cannot use it. The message names which. */
   | "FORBIDDEN"
-  /** 402 — the API requires a paid workspace. */
+  /** 402 — the workspace's plan does not include this part of the API. */
   | "PAID_PLAN_REQUIRED"
   /** 429 — a per-key or per-workspace budget is spent. See `retryAfter`. */
   | "RATE_LIMIT_EXCEEDED"
@@ -36,6 +36,24 @@ export type XPlantErrorCode =
   | "DEVICE_LIMIT_REACHED"
   /** 503 — the device allowance could not be checked. Nothing was registered. */
   | "DEVICE_LIMIT_UNAVAILABLE"
+  /** 402 — the workspace has reached a record limit its plan sets. */
+  | "PLAN_LIMIT_REACHED"
+  /** 402 — the plan does not include this feature (e.g. pricing, calibration history). */
+  | "FEATURE_NOT_INCLUDED"
+  /** 409 — the `external_id` (or another unique value) is already in use. */
+  | "DUPLICATE_ENTRY"
+  /** 403 — editing a teammate's plant needs its creator or a manager. */
+  | "PLANT_WRITE_FORBIDDEN"
+  /** 403 — editing a teammate's explant needs its creator or a manager. */
+  | "EXPLANT_WRITE_FORBIDDEN"
+  /** 403 — only a recipe's author can edit it. */
+  | "MEDIA_RECIPE_NOT_OWNER"
+  /** 413 — the uploaded file is too large. */
+  | "PAYLOAD_TOO_LARGE"
+  /** 415 — the uploaded file's type is not supported. */
+  | "UNSUPPORTED_MEDIA_TYPE"
+  /** 422 — the image at `image_url` could not be fetched. */
+  | "IMAGE_URL_FETCH_FAILED"
   /** Raised by the SDK itself when a success response is not a JSON object. */
   | "INVALID_RESPONSE"
   | (string & {});

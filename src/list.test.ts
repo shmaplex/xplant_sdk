@@ -240,6 +240,16 @@ describe("ListPromise", () => {
       client.tasks.list(),
       client.taskDemand.list(),
       client.sops.list(),
+      client.contaminations.list(),
+      client.comments.list({ entity_type: "plant", entity_id: "p1" }),
+      client.assets.list({ target: "plant", target_id: "p1" }),
+      client.mediaRecipes.list(),
+      client.equipment.list(),
+      client.equipment.listEvents("eq1"),
+      client.pricing.listCultureLines(),
+      client.pricing.listEvents(),
+      client.commerce.listOrderLines(),
+      client.commerce.getSellThrough(),
     ]) {
       expect(list).toBeInstanceOf(ListPromise);
     }

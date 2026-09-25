@@ -14,6 +14,96 @@
   },
   "endpoints": [
     {
+      "path": "/api/v1/assets",
+      "method": "GET",
+      "scopes": [
+        "read:assets"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/assets",
+      "method": "POST",
+      "scopes": [
+        "write:assets"
+      ],
+      "auth": "workspace_key",
+      "idempotent": true
+    },
+    {
+      "path": "/api/v1/assets/{id}",
+      "method": "GET",
+      "scopes": [
+        "read:assets"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/comments",
+      "method": "GET",
+      "scopes": [
+        "read:comments"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/comments",
+      "method": "POST",
+      "scopes": [
+        "write:comments"
+      ],
+      "auth": "workspace_key",
+      "idempotent": true
+    },
+    {
+      "path": "/api/v1/commerce/order-lines",
+      "method": "GET",
+      "scopes": [
+        "read:commerce"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/commerce/sell-through",
+      "method": "GET",
+      "scopes": [
+        "read:commerce"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/contaminations",
+      "method": "GET",
+      "scopes": [
+        "read:contaminations"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/contaminations",
+      "method": "POST",
+      "scopes": [
+        "write:contaminations"
+      ],
+      "auth": "workspace_key",
+      "idempotent": true
+    },
+    {
+      "path": "/api/v1/contaminations/{id}",
+      "method": "GET",
+      "scopes": [
+        "read:contaminations"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
       "path": "/api/v1/device-events",
       "method": "POST",
       "scopes": [
@@ -77,6 +167,33 @@
       "idempotent": false
     },
     {
+      "path": "/api/v1/equipment",
+      "method": "GET",
+      "scopes": [
+        "read:equipment"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/equipment/{id}",
+      "method": "GET",
+      "scopes": [
+        "read:equipment"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/equipment/{id}/events",
+      "method": "GET",
+      "scopes": [
+        "read:equipment"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
       "path": "/api/v1/equipment/{id}/events",
       "method": "POST",
       "scopes": [
@@ -104,10 +221,28 @@
       "idempotent": false
     },
     {
+      "path": "/api/v1/explants",
+      "method": "POST",
+      "scopes": [
+        "write:explants"
+      ],
+      "auth": "workspace_key",
+      "idempotent": true
+    },
+    {
       "path": "/api/v1/explants/{id}",
       "method": "GET",
       "scopes": [
         "read:explants"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/explants/{id}",
+      "method": "PATCH",
+      "scopes": [
+        "write:explants"
       ],
       "auth": "workspace_key",
       "idempotent": false
@@ -138,6 +273,42 @@
       "idempotent": false
     },
     {
+      "path": "/api/v1/media-recipes",
+      "method": "GET",
+      "scopes": [
+        "read:media_recipes"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/media-recipes",
+      "method": "POST",
+      "scopes": [
+        "write:media_recipes"
+      ],
+      "auth": "workspace_key",
+      "idempotent": true
+    },
+    {
+      "path": "/api/v1/media-recipes/{id}",
+      "method": "GET",
+      "scopes": [
+        "read:media_recipes"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/media-recipes/{id}",
+      "method": "PATCH",
+      "scopes": [
+        "write:media_recipes"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
       "path": "/api/v1/plants",
       "method": "GET",
       "scopes": [
@@ -147,10 +318,46 @@
       "idempotent": false
     },
     {
+      "path": "/api/v1/plants",
+      "method": "POST",
+      "scopes": [
+        "write:plants"
+      ],
+      "auth": "workspace_key",
+      "idempotent": true
+    },
+    {
       "path": "/api/v1/plants/{id}",
       "method": "GET",
       "scopes": [
         "read:plants"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/plants/{id}",
+      "method": "PATCH",
+      "scopes": [
+        "write:plants"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/pricing/culture-lines",
+      "method": "GET",
+      "scopes": [
+        "read:pricing"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
+      "path": "/api/v1/pricing/events",
+      "method": "GET",
+      "scopes": [
+        "read:pricing"
       ],
       "auth": "workspace_key",
       "idempotent": false

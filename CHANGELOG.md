@@ -13,6 +13,55 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-25
+
+The rest of the `/api/v1` surface: all 58 endpoints now have a method.
+
+### Added
+- **New resources:**
+  - `client.contaminations`: `list`, `get`, `create`
+  - `client.comments`: `list`, `create`
+  - `client.assets`: `list`, `get`, `create`, from a URL or base64
+  - `client.mediaRecipes`: `list`, `get`, `create`, `update`
+  - `client.pricing`: `listCultureLines`, `listEvents`
+  - `client.commerce`: `listOrderLines`, `getSellThrough`
+- **Plant and explant writes:** `plants.create`, `plants.update`,
+  `explants.create`, `explants.update`. `plants.create()` resolves to
+  `{ plant, warning }`, where `warning` is set when the first stage could not
+  be recorded.
+- **Equipment reads:** `equipment.list`, `equipment.get`, and
+  `equipment.listEvents` for an item's usage, calibration and maintenance
+  history.
+- **`custom_fields`** on plants, explants and contaminations: the lab's own
+  fields, returned on reads and accepted on writes.
+- **`me.get()`** returns `effectiveScopes` (what the key can use right now,
+  after its owner's role and the plan), `role` and `apiAccess` (`"full"` or
+  `"devices"`).
+- `Money` for exact decimal amounts, and error codes `PLAN_LIMIT_REACHED`,
+  `FEATURE_NOT_INCLUDED`, `DUPLICATE_ENTRY`, `PLANT_WRITE_FORBIDDEN`,
+  `EXPLANT_WRITE_FORBIDDEN`, `MEDIA_RECIPE_NOT_OWNER`, `PAYLOAD_TOO_LARGE`,
+  `UNSUPPORTED_MEDIA_TYPE` and `IMAGE_URL_FETCH_FAILED`.
+- The six new creates replay a repeated `Idempotency-Key`, which makes sixteen
+  replaying endpoints.
+- The new lists page by cursor from the start. `ListPromise` follows their
+  `meta.next_cursor`.
+
+### Changed
+- **Breaking (types):** equipment maintenance kinds are now `calibration` and
+  `preventive_maintenance`. Outcomes are now `pass`, `pass_after_adjustment`,
+  `out_of_tolerance`, `fail` and `not_performed`. These are the values the API
+  accepts.
+- README:
+  - Plans and access states the tiers. Teams and Enterprise get the full API.
+    Hobby and Pro Lab get device-only keys. Free has no API access.
+  - It also documents the role ceiling: a key never does more than its owner
+    can in xPlant, and 402 means the plan while 403 means the key or role.
+  - Every new resource has an example.
+  - Links point at docs.xplantpro.com.
+  - The `client.rateLimit` pacing example is removed. The API doesn't send
+    `X-RateLimit-*` headers yet, so `client.rateLimit` stays `null`. Pace with
+    `err.retryAfter` from a `429`.
+
 ## [0.4.0] — 2026-09-25
 
 ### Added
