@@ -41,14 +41,43 @@ evidence and equipment events.
 
 ## Publishing (maintainers only)
 
-Releases are published by `.github/workflows/publish.yml` when a `v*` tag is
-pushed. It uses npm trusted publishing with provenance, so no npm token is
-stored in the repository.
+Releases publish from a maintainer's machine when a `v*` tag is pushed. The
+GitHub Actions publish workflow (`publish.yml`) is paused for now.
 
-1. Update `CHANGELOG.md`
-2. Bump `version` in `package.json`
-3. Commit: `git commit -m "chore: release v0.x.x"`
-4. Tag and push: `git tag v0.x.x && git push origin v0.x.x`
+One-time setup in your clone:
 
-Pushing the tag publishes to npm. Do not push one until the release has been
-approved.
+```bash
+git config core.hooksPath .githooks   # enables .githooks/pre-push
+npm login                             # an account that can publish @shmaplex
+```
+
+To release:
+
+1. Update `CHANGELOG.md` and bump `version` in `package.json`, and merge that to `main`.
+2. Tag the merge commit and push the tag:
+
+   ```bash
+   git checkout main && git pull
+   git tag -a v0.x.y -m "v0.x.y"
+   git push origin v0.x.y
+   ```
+
+The pre-push hook then:
+- checks the tag matches `package.json`
+- checks out exactly the tagged commit in a throwaway worktree
+- runs lint, and then `prepublishOnly` (build, typecheck, tests)
+- runs `npm publish`, which may ask you to approve in the browser
+
+If any step fails, the push is aborted, so a tag reaches GitHub only once its
+version is on npm. Pushing a tag whose version is already on npm skips the
+publish.
+
+- Rehearse without publishing: `XPLANT_RELEASE_DRY_RUN=1 git push origin v0.x.y`
+  runs every check and then stops the push.
+- Push a tag without publishing: `SKIP_NPM_PUBLISH=1 git push …`.
+
+Versions published this way carry no npm provenance attestation, because npm
+only attaches one when the package is built in a supported CI system. To go
+back to publishing from CI, re-enable the workflow (`gh workflow enable
+publish.yml`). npm's trusted-publisher record for the package must name this
+repository (`shmaplex/xplant_sdk`) and `publish.yml`.

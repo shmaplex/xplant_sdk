@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Publishes @shmaplex/xplant-sdk to npm when a release tag (v1.2.3) is pushed.
+#
+# Maintainers enable it once per clone:   git config core.hooksPath .githooks
+# Skip it for one push:                   SKIP_NPM_PUBLISH=1 git push …
+# Rehearse without publishing:            XPLANT_RELEASE_DRY_RUN=1 git push …
+#
+# For each v* tag being pushed it:
+#   1. checks the tag matches the version in that commit's package.json;
+#   2. skips a version npm already has, so re-pushing a tag is harmless;
+#   3. checks out exactly the tagged commit in a throwaway worktree, runs lint,
+#      and publishes — `prepublishOnly` builds, typechecks and tests first.
+# Any failure aborts the push, so a tag reaches GitHub only once its version
+# is on npm. Ordinary branch pushes pass straight through.
+
+set -euo pipefail
+
+[ "${SKIP_NPM_PUBLISH:-0}" = "1" ] && exit 0
+
+zero="0000000000000000000000000000000000000000"
+tags=()
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/tags/v[0-9]*)
+      [ "$local_sha" = "$zero" ] && continue # deleting a tag publishes nothing
+      tags+=("${remote_ref#refs/tags/}:$local_sha")
+      ;;
+  esac
+done
+[ "${#tags[@]}" -eq 0 ] && exit 0
+
+repo_root="$(git rev-parse --show-toplevel)"
+name="$(node -p "require('$repo_root/package.json').name")"
+
+say() { printf '\033[1m[release]\033[0m %s\n' "$*" >&2; }
+fail() { say "$*"; say "Push aborted. Nothing was published for this tag."; exit 1; }
+
+for entry in "${tags[@]}"; do
+  tag="${entry%%:*}"
+  commit="$(git rev-parse "${entry#*:}^{commit}")"
+  version="${tag#v}"
+
+  tagged_version="$(git show "$commit:package.json" | node -e \
+    "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).version))")"
+  [ "$tagged_version" = "$version" ] ||
+    fail "$tag points at a commit whose package.json says $tagged_version, not $version."
+
+  if [ "$(npm view "$name@$version" version 2>/dev/null || true)" = "$version" ]; then
+    say "$name@$version is already on npm — pushing $tag without publishing."
+    continue
+  fi
+
+  dry_run="${XPLANT_RELEASE_DRY_RUN:-0}"
+  if [ "$dry_run" != "1" ]; then
+    npm whoami >/dev/null 2>&1 ||
+      fail "Not logged in to npm. Run \`npm login\` and push again."
+  fi
+
+  work="$(mktemp -d "${TMPDIR:-/tmp}/xplant-sdk-release.XXXXXX")"
+  cleanup() { git -C "$repo_root" worktree remove --force "$work" >/dev/null 2>&1 || rm -rf "$work"; }
+  trap cleanup EXIT
+
+  say "Publishing $name@$version from $tag ($(git rev-parse --short "$commit"))…"
+  git -C "$repo_root" worktree add --detach "$work" "$commit" >/dev/null
+
+  # Reuse the installed dependencies when the lockfile is unchanged; otherwise
+  # install exactly what the tagged commit locks.
+  if cmp -s "$work/package-lock.json" "$repo_root/package-lock.json" && [ -d "$repo_root/node_modules" ]; then
+    ln -s "$repo_root/node_modules" "$work/node_modules"
+  else
+    (cd "$work" && npm ci --no-audit --no-fund) || fail "npm ci failed."
+  fi
+
+  # Vitest 2 refuses to start when VITEST_MAX_* caps workers below its
+  # computed minimum; a minimum of 1 keeps any cap in place.
+  export VITEST_MIN_FORKS=1 VITEST_MIN_THREADS=1
+
+  (cd "$work" && npm run lint) || fail "Lint failed."
+  # prepublishOnly runs build, typecheck and tests before anything is uploaded.
+  # npm asks for 2FA or a browser approval here when the account requires it.
+  if [ "$dry_run" = "1" ]; then
+    (cd "$work" && npm publish --access public --dry-run) || fail "npm publish --dry-run failed."
+    say "Dry run: $name@$version passed every check and was NOT published."
+    say "Aborting the push so the tag does not reach GitHub unpublished."
+    exit 1
+  fi
+  (cd "$work" && npm publish --access public) || fail "npm publish failed."
+
+  say "Published $name@$version."
+  cleanup
+  trap - EXIT
+done
