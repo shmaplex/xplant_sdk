@@ -1,21 +1,26 @@
 import type { EnvelopeRequestFn } from "../client.js";
 import { toQuery } from "../query.js";
-import type { EventListParams, EventSummary } from "../types.js";
+import type { EventListParams, EventSummary, RequestOptions } from "../types.js";
 
 export class EventsResource {
   constructor(private request: EnvelopeRequestFn) {}
 
   /**
-   * List change-history events for a plant or explant lineage, oldest first.
+   * List change history for the workspace, oldest first.
    * Requires the `read:events` scope.
    *
-   * `entity` is required — plant and explant history live in separate
-   * tables, so pull one at a time rather than merging them.
+   * `entity` is required. Plant and explant history are paged independently,
+   * so there is no combined feed — call once per entity type.
    *
-   * Events are immutable and insert-ordered: save the latest `created_at`
-   * you received and pass it back as `since` to pull only what's new.
+   * Events are immutable and insert-ordered. To pull deltas on a schedule,
+   * save the newest `created_at` you received and pass it back as `since`.
+   *
+   * @example
+   * let since: string | undefined;
+   * const batch = await client.events.list({ entity: "explant", since });
+   * since = batch.at(-1)?.created_at ?? since;
    */
-  async list(params: EventListParams): Promise<EventSummary[]> {
+  async list(params: EventListParams, options?: RequestOptions): Promise<EventSummary[]> {
     const { data } = await this.request<EventSummary[]>(
       `/api/v1/events${toQuery({
         entity: params.entity,
@@ -23,6 +28,8 @@ export class EventsResource {
         limit: params.limit,
         offset: params.offset,
       })}`,
+      {},
+      options,
     );
     return data;
   }

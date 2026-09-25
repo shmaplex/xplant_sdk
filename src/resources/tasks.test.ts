@@ -56,7 +56,7 @@ describe("tasks.list", () => {
 
     await client().tasks.list();
 
-    expect(calls[0].url).toBe("https://www.xplantpro.com/api/v1/tasks");
+    expect(calls[0].url).toBe("https://app.xplantpro.com/api/v1/tasks");
   });
 });
 
@@ -73,7 +73,7 @@ describe("tasks.create", () => {
     });
 
     expect(calls[0].init.method).toBe("POST");
-    expect(calls[0].url).toBe("https://www.xplantpro.com/api/v1/tasks");
+    expect(calls[0].url).toBe("https://app.xplantpro.com/api/v1/tasks");
     expect(JSON.parse(calls[0].init.body as string)).toEqual({
       title: "Replate N2001 — second pass",
       priority: "high",
@@ -104,7 +104,7 @@ describe("tasks.update", () => {
     const result = await client().tasks.update("t1", { priority: "urgent", priority_rank: 1500 });
 
     expect(calls[0].init.method).toBe("PATCH");
-    expect(calls[0].url).toBe("https://www.xplantpro.com/api/v1/tasks/t1");
+    expect(calls[0].url).toBe("https://app.xplantpro.com/api/v1/tasks/t1");
     expect(result.task.priority_rank).toBe(1500);
     expect(result.skipped).toBe(false);
     expect(result.priority_write?.applied).toBe(true);

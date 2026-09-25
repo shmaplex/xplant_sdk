@@ -46,7 +46,7 @@ describe("devices", () => {
     });
 
     expect(calls[0].init.method).toBe("POST");
-    expect(calls[0].url).toBe("https://www.xplantpro.com/api/v1/devices");
+    expect(calls[0].url).toBe("https://app.xplantpro.com/api/v1/devices");
     expect(created.id).toBe("d1");
     expect(created.status).toBe("active");
   });
@@ -65,7 +65,7 @@ describe("devices", () => {
     const found = await client().devices.get("d2");
 
     // There is no single-device route, so this must hit the collection.
-    expect(calls[0].url).toBe("https://www.xplantpro.com/api/v1/devices");
+    expect(calls[0].url).toBe("https://app.xplantpro.com/api/v1/devices");
     expect(found.id).toBe("d2");
   });
 

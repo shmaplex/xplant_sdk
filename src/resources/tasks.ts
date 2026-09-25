@@ -2,11 +2,13 @@ import type { EnvelopeRequestFn } from "../client.js";
 import { toQuery } from "../query.js";
 import type {
   PriorityWriteReport,
+  RequestOptions,
   TaskCreateInput,
   TaskListParams,
   TaskSummary,
   TaskUpdateInput,
   TaskUpdateResult,
+  WriteOptions,
 } from "../types.js";
 
 /**
@@ -32,8 +34,11 @@ export class TasksResource {
   /**
    * List tasks for the workspace, soonest due first.
    * Requires the `read:tasks` scope.
+   *
+   * @example
+   * const todo = await client.tasks.list({ status: "todo", limit: 50 });
    */
-  async list(params: TaskListParams = {}): Promise<TaskSummary[]> {
+  async list(params: TaskListParams = {}, options?: RequestOptions): Promise<TaskSummary[]> {
     const { data } = await this.request<TaskSummary[]>(
       `/api/v1/tasks${toQuery({
         limit: params.limit,
@@ -41,17 +46,24 @@ export class TasksResource {
         status: params.status,
         assigned_to: params.assigned_to,
       })}`,
+      {},
+      options,
     );
     return data;
   }
 
   /**
-   * Get a single task by ID.
+   * Get a single task by ID, including its plant or explant link.
    * Requires the `read:tasks` scope.
+   *
+   * @example
+   * const task = await client.tasks.get(taskId);
    */
-  async get(taskId: string): Promise<TaskSummary> {
+  async get(taskId: string, options?: RequestOptions): Promise<TaskSummary> {
     const { data } = await this.request<TaskSummary>(
       `/api/v1/tasks/${encodeURIComponent(taskId)}`,
+      {},
+      options,
     );
     return data;
   }
@@ -63,18 +75,21 @@ export class TasksResource {
    * A new task has no order for anyone to have set, so `priority` and
    * `priority_rank` always apply here.
    *
+   * Safe to retry: the API runs a create once per `Idempotency-Key` and answers
+   * a repeat with the task it already made.
+   *
    * @example
-   * await client.tasks.create({
-   *   title: "Replate N2001 — second pass",
-   *   priority: "high",
-   *   assigned_to: memberId,
-   * });
+   * await client.tasks.create(
+   *   { title: "Replate N2001 — second pass", priority: "high", assigned_to: memberId },
+   *   { idempotencyKey: "replate-N2001-pass-2" },
+   * );
    */
-  async create(input: TaskCreateInput): Promise<TaskSummary> {
-    const { data } = await this.request<TaskSummary>("/api/v1/tasks", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
+  async create(input: TaskCreateInput, options?: WriteOptions): Promise<TaskSummary> {
+    const { data } = await this.request<TaskSummary>(
+      "/api/v1/tasks",
+      { method: "POST", body: JSON.stringify(input) },
+      { ...options, idempotent: true },
+    );
     return data;
   }
 
@@ -98,10 +113,15 @@ export class TasksResource {
    *   console.warn(result.priority_write?.message);
    * }
    */
-  async update(taskId: string, input: TaskUpdateInput): Promise<TaskUpdateResult> {
+  async update(
+    taskId: string,
+    input: TaskUpdateInput,
+    options?: WriteOptions,
+  ): Promise<TaskUpdateResult> {
     const { data, meta } = await this.request<TaskSummary>(
       `/api/v1/tasks/${encodeURIComponent(taskId)}`,
       { method: "PATCH", body: JSON.stringify(input) },
+      options,
     );
     const priorityWrite = readPriorityWrite(meta);
     return {

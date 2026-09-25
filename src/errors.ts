@@ -1,0 +1,106 @@
+/**
+ * Codes the API is known to return. Branch on these rather than on `message`.
+ *
+ * Open-ended on purpose: routes also return resource-specific `*_FAILED` and
+ * `*_QUERY_FAILED` codes for server-side failures, and new codes are added
+ * without a new SDK release.
+ */
+export type XPlantErrorCode =
+  /** 401 — no key, an unknown or revoked key, or a key whose owner left the workspace. */
+  | "UNAUTHORIZED"
+  /** 403 — the key is valid but lacks the scope. The message names the scope. */
+  | "FORBIDDEN"
+  /** 402 — the API requires a paid workspace. */
+  | "PAID_PLAN_REQUIRED"
+  /** 429 — a per-key or per-workspace budget is spent. See `retryAfter`. */
+  | "RATE_LIMIT_EXCEEDED"
+  /** 403 — a device token was sent to an endpoint that needs a workspace key. */
+  | "DEVICE_TOKEN_NOT_ACCEPTED"
+  /** 403 — a device token tried to write about a device other than its own. */
+  | "DEVICE_TOKEN_WRONG_DEVICE"
+  /** 404 — not found, or outside the key's workspace. The API does not distinguish. */
+  | "NOT_FOUND"
+  /** 400 or 422 — the request failed validation. The message names the field. */
+  | "VALIDATION_ERROR"
+  /** 409 — a request with this `Idempotency-Key` is still running. Retry shortly. */
+  | "IDEMPOTENCY_IN_FLIGHT"
+  /** 409 — the SOP has no version in force, so it cannot be run. */
+  | "SOP_RUN_NOT_EFFECTIVE"
+  /** 409 — the run is complete and takes no more evidence. */
+  | "SOP_RUN_CLOSED"
+  /** 409 — a device in the batch is paused or retired. */
+  | "DEVICE_INGEST_DISABLED"
+  /** 402 — the workspace has connected every device its plan includes. */
+  | "DEVICE_LIMIT_REACHED"
+  /** 503 — the device allowance could not be checked. Nothing was registered. */
+  | "DEVICE_LIMIT_UNAVAILABLE"
+  /** Raised by the SDK itself when a success response is not a JSON object. */
+  | "INVALID_RESPONSE"
+  | (string & {});
+
+/**
+ * Error thrown when the xPlant API returns a failure.
+ *
+ * Branch on {@link XPlantError.code}, which is stable. The `message` text is
+ * human-readable and may be reworded between releases. For the broad class of
+ * failure — "bad key" versus "not allowed" — branch on `status`: a few older
+ * device and sensor routes do not use the standard code for every status.
+ */
+export class XPlantError extends Error {
+  readonly status: number;
+  /** The raw response body, as text. */
+  readonly body: string;
+  /** Stable machine-readable code, e.g. `FORBIDDEN`. `null` when a gateway answered instead of the API. */
+  readonly code: XPlantErrorCode | null;
+  /**
+   * Seconds the API asked you to wait before retrying, from the `Retry-After`
+   * header. Set on `429 RATE_LIMIT_EXCEEDED` and `409 IDEMPOTENCY_IN_FLIGHT`;
+   * `null` when the response carried none.
+   */
+  readonly retryAfter: number | null;
+
+  constructor(
+    status: number,
+    body: string,
+    code: XPlantErrorCode | null = null,
+    detail?: string,
+    retryAfter: number | null = null,
+  ) {
+    const suffix = code ? ` (${code})` : "";
+    super(`xPlant API error ${status}${suffix}: ${detail ?? body}`);
+    this.name = "XPlantError";
+    this.status = status;
+    this.body = body;
+    this.code = code;
+    this.retryAfter = retryAfter;
+  }
+}
+
+/** Pulls `error` and `code` out of a failure body without trusting its shape. */
+export function readFailure(text: string): { error?: string; code?: string } {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (parsed === null || typeof parsed !== "object") return {};
+    const { error, code } = parsed as { error?: unknown; code?: unknown };
+    return {
+      error: typeof error === "string" && error.length > 0 ? error : undefined,
+      code: typeof code === "string" && code.length > 0 ? code : undefined,
+    };
+  } catch {
+    // Not JSON — an edge proxy or gateway answered instead of the app.
+    return {};
+  }
+}
+
+/**
+ * `Retry-After` as whole seconds. The API sends delta-seconds; an HTTP date is
+ * accepted too, since a proxy in front of it may send one.
+ */
+export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | null {
+  if (value === null || value === undefined) return null;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  const date = Date.parse(trimmed);
+  if (Number.isNaN(date)) return null;
+  return Math.max(0, Math.ceil((date - now) / 1000));
+}

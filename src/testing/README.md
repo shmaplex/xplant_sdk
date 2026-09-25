@@ -1,16 +1,19 @@
 # Test surface
 
-`v1-surface.json` is generated in the **xplant** repo, not here:
+`v1-surface.json` is a manifest of every `/api/v1` route: its path, method,
+the scopes it requires, which credentials it accepts (`auth`), and whether it
+replays a repeated `Idempotency-Key` (`idempotent`). It is generated from the
+API's route code by the xPlant team and vendored here unchanged. Do not edit it
+by hand.
 
-```bash
-# in the xplant checkout
-npm run api:surface     # rewrites docs/api/v1-surface.json from app/api/v1/**
-```
-
-Then copy it across:
-
-```bash
-cp ../xplant/docs/api/v1-surface.json src/testing/v1-surface.json
+```jsonc
+{
+  "path": "/api/v1/tasks",
+  "method": "POST",
+  "scopes": ["write:tasks"],
+  "auth": "workspace_key",            // or "workspace_key_or_device_token"
+  "idempotent": true
+}
 ```
 
 ## Why it exists
@@ -23,14 +26,23 @@ path the test author also believed in — when that belief is wrong, both sides
 are wrong together and nothing fails.
 
 `fakeXPlant()` routes against this manifest instead. A path that is not in it
-returns 404, a method the route does not export returns 405, and a call missing
-its scope returns 403 — the same answers the real API gives.
+returns 404, a method the route does not export returns 405, a call missing its
+scope returns 403, a device token on a workspace-only route returns 403, and a
+repeated `Idempotency-Key` on a replaying route gets the stored answer back —
+the same answers the real API gives.
+
+`contract.test.ts` then checks, from the manifest rather than from a list kept
+in this repo:
+
+- every SDK method reaches a route that exists, and every route has a method;
+- reads and replaying writes are resent after a network failure, under the same
+  key, and other writes are not;
+- device tokens reach exactly the endpoints whose `auth` accepts them.
 
 ## Keeping it current
 
-xplant's own `tests/api/v1-surface.test.ts` fails if the manifest there drifts
-from the route files, so the generated artifact is trustworthy. What this repo
-cannot detect on its own is the copy here being *older* than that one: a route
-deleted in xplant would still appear available to these tests.
-
-Re-copy it whenever you touch a resource, and before cutting a release.
+What this repo cannot detect on its own is the copy here being *older* than the
+API: a route removed upstream would still appear available to these tests.
+Replace the file with the latest manifest whenever you touch a resource, and
+before cutting a release. When a route changes its `auth` or `idempotent`
+value, the contract tests fail until the SDK matches.
