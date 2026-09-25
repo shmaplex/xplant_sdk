@@ -36,6 +36,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Tokenless trusted publishing needs npm 11.5.1+. Node 20 ships npm 10,
+      # which would fall back to a stored token and fail without one.
+      - name: Use an npm that supports trusted publishing
+        run: npm install -g npm@^11.5.1
+
       - name: Publish to npm
         run: npm publish --access public --provenance
 
