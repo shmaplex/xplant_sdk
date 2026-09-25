@@ -330,9 +330,10 @@ export class XPlantClient {
   }
 
   /**
-   * The per-key request budget reported by the most recent response that
-   * carried `X-RateLimit-*` headers, or `null` before any has. Use it to slow a
-   * bulk job down before it meets a `429`.
+   * The per-key request budget from the most recent response that carried
+   * `X-RateLimit-*` headers, or `null` when none has. The API does not send
+   * these headers yet, so this is `null` today. Rely on `err.retryAfter` from a
+   * `429` to pace a bulk job.
    */
   get rateLimit(): RateLimitInfo | null {
     return this.lastRateLimit;

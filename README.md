@@ -928,7 +928,7 @@ try {
     err.code;       // stable machine-readable code — branch on this
     err.message;    // readable, includes the API's error text; wording may change
     err.retryAfter; // seconds to wait, from Retry-After, or null
-    err.requestId;  // the API's id for this request — quote it to support
+    err.requestId;  // the API's id for this request, when it sends one — quote it to support
     err.body;       // the raw response text
   } else if (err instanceof XPlantTimeoutError) {
     err.timeout;    // no answer within this many ms
@@ -1020,20 +1020,6 @@ With retry on:
 before it is abandoned with `XPlantTimeoutError`. Set `timeout` on the client or
 on one call; `0` waits indefinitely. With retry on, a timed-out read is retried
 like any other network failure.
-
-**Pacing a bulk job.** `client.rateLimit` holds the per-key budget from the most
-recent response that reported one — `{ limit, remaining, reset }`, with `reset`
-in seconds — or `null` until a response has:
-
-```typescript
-for await (const page of client.tasks.list({ limit: 200 }).pages()) {
-  await process(page.data);
-  const budget = client.rateLimit;
-  if (budget && budget.remaining < 50) {
-    await new Promise((r) => setTimeout(r, budget.reset * 1000));
-  }
-}
-```
 
 ---
 
@@ -1159,7 +1145,6 @@ import type {
   XPlantErrorCode,
   WriteOptions,
   ListPage,
-  RateLimitInfo,
   SensorBufferOptions,
 } from "@shmaplex/xplant-sdk";
 ```

@@ -58,6 +58,9 @@ The rest of the `/api/v1` surface: all 58 endpoints now have a method.
     can in xPlant, and 402 means the plan while 403 means the key or role.
   - Every new resource has an example.
   - Links point at docs.xplantpro.com.
+  - The `client.rateLimit` pacing example is removed. The API doesn't send
+    `X-RateLimit-*` headers yet, so `client.rateLimit` stays `null`. Pace with
+    `err.retryAfter` from a `429`.
 
 ## [0.4.0] — 2026-09-25
 
