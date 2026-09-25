@@ -35,6 +35,11 @@ export interface XPlantApiResponse<T> {
 export interface RequestOptions {
   /** Abort the request, including any retry wait in progress. */
   signal?: AbortSignal;
+  /**
+   * Milliseconds each attempt may take, including reading the response, before
+   * it fails with `XPlantTimeoutError`. Overrides the client's `timeout`.
+   */
+  timeout?: number;
 }
 
 /** Accepted as the last argument of every write method. */
@@ -101,15 +106,20 @@ export type XPlantScope =
 // ---------------------------------------------------------------------------
 
 /**
- * Offset paging, shared by every list endpoint that pages. The API has no
- * cursor and returns no total — a short page is the last page. See `paginate()`
- * to walk every page.
+ * Paging, shared by every list endpoint that pages. Most callers never set
+ * these: iterate the list and the SDK fetches every page. See `ListPromise`.
  */
 export interface PageParams {
-  /** Defaults to 50 server-side, capped at 200. */
+  /** Rows per page. Defaults to 50 server-side, capped at 200. */
   limit?: number;
-  /** Defaults to 0. */
+  /** Rows to skip. Defaults to 0. Not combinable with `cursor`. */
   offset?: number;
+  /**
+   * Resume from a page's `nextCursor` (see `ListPromise.pages()`), with the same
+   * filters it was issued for. A cursor the API no longer accepts answers
+   * `422 INVALID_CURSOR`; start again from the first page.
+   */
+  cursor?: string;
 }
 
 // ---------------------------------------------------------------------------

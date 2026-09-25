@@ -1,4 +1,5 @@
 import type { EnvelopeRequestFn } from "../client.js";
+import { ListPromise } from "../list.js";
 import { toQuery } from "../query.js";
 import type { PageParams, RequestOptions, SopDetail, SopSummary } from "../types.js";
 
@@ -13,13 +14,16 @@ export class SopsResource {
    * @example
    * const sops = await client.sops.list({ limit: 20 });
    */
-  async list(params: PageParams = {}, options?: RequestOptions): Promise<SopSummary[]> {
-    const { data } = await this.request<SopSummary[]>(
-      `/api/v1/sops${toQuery({ limit: params.limit, offset: params.offset })}`,
-      {},
-      options,
+  list(params: PageParams = {}, options?: RequestOptions): ListPromise<SopSummary> {
+    return new ListPromise(
+      (page) =>
+        this.request<SopSummary[]>(
+          `/api/v1/sops${toQuery({ limit: page.limit, offset: page.offset, cursor: page.cursor })}`,
+          {},
+          options,
+        ),
+      params,
     );
-    return data;
   }
 
   /**

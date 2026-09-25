@@ -214,6 +214,18 @@ const INVOCATIONS: Invocation[] = [
   },
 
   {
+    // Not an endpoint of its own: a device-side queue that posts through
+    // createBatch(). Closing it sends what was added.
+    name: "sensorReadings.buffer",
+    expect: "POST /api/v1/sensor-readings",
+    call: async (c) => {
+      const buffer = c.sensorReadings.buffer({ flushIntervalMs: 0, onError: () => {} });
+      buffer.add({ device_id: DEVICE_ID, type: "co2", value: 800, unit: "ppm" });
+      await buffer.close();
+    },
+  },
+
+  {
     name: "equipment.recordEvent",
     expect: "POST /api/v1/equipment/{id}/events",
     call: (c, o) => c.equipment.recordEvent("eq1", { kind: "calibration", outcome: "pass" }, o),
@@ -271,7 +283,7 @@ describe("every SDK method reaches a route that exists", () => {
     const resources = Object.entries(Object.getOwnPropertyDescriptors(XPlantClient.prototype))
       .filter(([, descriptor]) => typeof descriptor.get === "function")
       .map(([name]) => [name, (c as unknown as Record<string, unknown>)[name]] as const)
-      .filter(([, value]) => typeof value === "object" && value !== null);
+      .filter(([, value]) => value?.constructor?.name.endsWith("Resource"));
 
     expect(resources.length).toBeGreaterThanOrEqual(15);
 

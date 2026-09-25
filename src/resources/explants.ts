@@ -1,4 +1,5 @@
 import type { EnvelopeRequestFn } from "../client.js";
+import { ListPromise } from "../list.js";
 import { toQuery } from "../query.js";
 import type { ExplantListParams, ExplantSummary, RequestOptions } from "../types.js";
 
@@ -14,23 +15,30 @@ export class ExplantsResource {
    * change with the query — see {@link findByExternalId} for the single-record
    * convenience.
    *
-   * The API returns no total — a page shorter than `limit` is the last page.
+   * Await it for the first page, or iterate it for every batch — see
+   * {@link ListPromise}.
    *
    * @example
-   * const batches = await client.explants.list({ limit: 50 });
+   * for await (const batch of client.explants.list()) {
+   *   console.log(batch.external_id, batch.current_count);
+   * }
    */
-  async list(params: ExplantListParams = {}, options?: RequestOptions): Promise<ExplantSummary[]> {
-    const { data } = await this.request<ExplantSummary[]>(
-      // The wire parameter is camelCase; the field it resolves is `external_id`.
-      `/api/v1/explants${toQuery({
-        externalId: params.external_id,
-        limit: params.limit,
-        offset: params.offset,
-      })}`,
-      {},
-      options,
+  list(params: ExplantListParams = {}, options?: RequestOptions): ListPromise<ExplantSummary> {
+    return new ListPromise(
+      (page) =>
+        this.request<ExplantSummary[]>(
+          // The wire parameter is camelCase; the field it resolves is `external_id`.
+          `/api/v1/explants${toQuery({
+            externalId: params.external_id,
+            limit: page.limit,
+            offset: page.offset,
+            cursor: page.cursor,
+          })}`,
+          {},
+          options,
+        ),
+      params,
     );
-    return data;
   }
 
   /**

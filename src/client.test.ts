@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { API_KEYS_URL, DEFAULT_BASE_URL, XPlantClient, XPlantError } from "./client.js";
+import { API_KEYS_URL, DEFAULT_BASE_URL, DEFAULT_TIMEOUT_MS, XPlantClient, XPlantError } from "./client.js";
+import { XPlantConnectionError, XPlantTimeoutError } from "./errors.js";
 
 interface Reply {
   status?: number;
@@ -393,6 +394,139 @@ describe("retry", () => {
     controller.abort(new Error("stopped"));
 
     await expect(outcome).resolves.toMatchObject({ message: "stopped" });
+  });
+});
+
+/** A fetch that never answers, and rejects only when its signal aborts — a hung connection. */
+function hangingFetch() {
+  const calls: RequestInit[] = [];
+  const impl = (_url: string, init: RequestInit = {}) => {
+    calls.push(init);
+    return new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    });
+  };
+  return { fetch: impl as unknown as typeof fetch, calls };
+}
+
+describe("timeouts and connection failures", () => {
+  it("abandons an attempt after the default timeout with XPlantTimeoutError", async () => {
+    vi.useFakeTimers();
+    const hung = hangingFetch();
+    const client = new XPlantClient({ apiKey: "xpk_live_test", fetch: hung.fetch });
+
+    const outcome = client.plants.list().then(null, (e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(DEFAULT_TIMEOUT_MS);
+
+    const err = await outcome;
+    expect(err).toBeInstanceOf(XPlantTimeoutError);
+    expect(err).toBeInstanceOf(XPlantConnectionError);
+    expect((err as XPlantTimeoutError).timeout).toBe(60_000);
+  });
+
+  it("honours a per-call timeout over the client's", async () => {
+    vi.useFakeTimers();
+    const hung = hangingFetch();
+    const client = new XPlantClient({ apiKey: "xpk_live_test", fetch: hung.fetch, timeout: 60_000 });
+
+    const outcome = client.plants.get("p1", { timeout: 500 }).then(null, (e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(await outcome).toMatchObject({ name: "XPlantTimeoutError", timeout: 500 });
+  });
+
+  it("retries a timed-out read when retry is on", async () => {
+    vi.useFakeTimers();
+    let attempts = 0;
+    const flaky = ((_url: string, init: RequestInit = {}) => {
+      attempts += 1;
+      if (attempts > 1) return Promise.resolve(new Response(JSON.stringify({ ok: true, data: [] })));
+      return new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+    }) as unknown as typeof fetch;
+    const client = new XPlantClient({
+      apiKey: "xpk_live_test",
+      fetch: flaky,
+      timeout: 1_000,
+      retry: { baseDelayMs: 0 },
+    });
+
+    const pending = client.plants.list();
+    // The timeout fires at 1 000 ms; the zero-length retry wait is queued just after.
+    await vi.advanceTimersByTimeAsync(1_100);
+    await expect(pending).resolves.toEqual([]);
+    expect(attempts).toBe(2);
+  });
+
+  it("does not time out when timeout is 0", async () => {
+    const calls: RequestInit[] = [];
+    const client = new XPlantClient({
+      apiKey: "xpk_live_test",
+      timeout: 0,
+      fetch: ((_url: string, init: RequestInit) => {
+        calls.push(init);
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, data: [] })));
+      }) as unknown as typeof fetch,
+    });
+
+    await client.plants.list();
+    expect(calls[0].signal).toBeUndefined();
+  });
+
+  it("wraps a network failure in XPlantConnectionError, keeping the cause", async () => {
+    const cause = new TypeError("fetch failed");
+    const client = new XPlantClient({
+      apiKey: "xpk_live_test",
+      fetch: (() => Promise.reject(cause)) as unknown as typeof fetch,
+    });
+
+    const err = await client.plants.list().then(null, (e: unknown) => e);
+
+    expect(err).toBeInstanceOf(XPlantConnectionError);
+    expect(err).not.toBeInstanceOf(XPlantTimeoutError);
+    expect((err as XPlantConnectionError).cause).toBe(cause);
+    expect((err as Error).message).toContain("fetch failed");
+  });
+
+  it("rejects with the caller's own reason when they abort", async () => {
+    const hung = hangingFetch();
+    const client = new XPlantClient({ apiKey: "xpk_live_test", fetch: hung.fetch });
+    const controller = new AbortController();
+
+    const outcome = client.plants.list({}, { signal: controller.signal }).then(null, (e: unknown) => e);
+    controller.abort(new Error("user cancelled"));
+
+    expect(await outcome).toMatchObject({ message: "user cancelled" });
+  });
+});
+
+describe("response metadata", () => {
+  it("puts the API's request id on an error", async () => {
+    stubFetch(() => fail(404, "NOT_FOUND", { "X-Request-Id": "req_123" }));
+
+    const err = await new XPlantClient({ apiKey: "xpk_live_test" })
+      .tasks.get("missing")
+      .catch((caught: unknown) => caught);
+
+    expect((err as XPlantError).requestId).toBe("req_123");
+  });
+
+  it("reports the rate-limit budget of the latest response that carried one", async () => {
+    stubFetch((_url, _init, attempt) => ({
+      ...ok([]),
+      headers: (attempt === 0
+        ? { "X-RateLimit-Limit": "1000", "X-RateLimit-Remaining": "998", "X-RateLimit-Reset": "42" }
+        : {}) as Record<string, string>,
+    }));
+    const client = new XPlantClient({ apiKey: "xpk_live_test" });
+    expect(client.rateLimit).toBeNull();
+
+    await client.plants.list();
+    expect(client.rateLimit).toEqual({ limit: 1000, remaining: 998, reset: 42 });
+
+    await client.plants.list();
+    expect(client.rateLimit).toEqual({ limit: 1000, remaining: 998, reset: 42 });
   });
 });
 

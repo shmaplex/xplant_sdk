@@ -1,4 +1,5 @@
 import type { EnvelopeRequestFn } from "../client.js";
+import { ListPromise } from "../list.js";
 import { toQuery } from "../query.js";
 import type {
   RequestOptions,
@@ -21,18 +22,22 @@ export class TransfersResource {
    * @example
    * const transfers = await client.transfers.list({ explant_id: explantId });
    */
-  async list(params: TransferListParams, options?: RequestOptions): Promise<TransferSummary[]> {
-    const { data } = await this.request<TransferSummary[]>(
-      `/api/v1/transfers${toQuery({
-        plant_id: params.plant_id,
-        explant_id: params.explant_id,
-        limit: params.limit,
-        offset: params.offset,
-      })}`,
-      {},
-      options,
+  list(params: TransferListParams, options?: RequestOptions): ListPromise<TransferSummary> {
+    return new ListPromise(
+      (page) =>
+        this.request<TransferSummary[]>(
+          `/api/v1/transfers${toQuery({
+            plant_id: params.plant_id,
+            explant_id: params.explant_id,
+            limit: page.limit,
+            offset: page.offset,
+            cursor: page.cursor,
+          })}`,
+          {},
+          options,
+        ),
+      params,
     );
-    return data;
   }
 
   /**

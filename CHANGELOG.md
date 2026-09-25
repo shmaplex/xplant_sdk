@@ -51,16 +51,38 @@ existing code are the envelope unwrapping and the new default host.
   retry on, the SDK generates one per call and reuses it across attempts.
 - `XPlantError.retryAfter` (seconds, from `Retry-After`) and an
   `XPlantErrorCode` type listing the codes the API is known to return.
-- `paginate()` — an async iterator over any `limit`/`offset` list, plus
-  `MAX_PAGE_SIZE`.
-- Every method takes a trailing options object with an `AbortSignal`, which
-  also cancels a retry wait.
+- **Auto-paging lists, ready for cursors.** Paged `list()` methods return a
+  `ListPromise`. Awaiting it gives the first page, as before. Iterating it with
+  `for await` gives every row, and `.pages()` gives whole pages, each with a
+  `nextCursor` to resume from. It follows `meta.next_cursor` wherever an
+  endpoint returns one and falls back to offsets elsewhere, so code is
+  unchanged as the API moves its lists to cursors. `PageParams.cursor` resumes a
+  saved cursor. `INVALID_CURSOR` is a known error code.
+- **Timeouts.** Each attempt is abandoned after 60 s by default, with
+  `XPlantTimeoutError`. The limit is set with `timeout` on the client or per
+  call, and `0` disables it.
+- **Typed network errors.** `XPlantConnectionError` is thrown when the API never
+  answered, with the `fetch` error on `cause`. `XPlantTimeoutError` extends it.
+- **`sensorReadings.buffer()`** for devices:
+  - It batches readings, sends them on an interval or once 500 are waiting, and
+    keeps them through outages.
+  - It stamps `recorded_at` and `external_id`, so a resend is stored once.
+  - It drops and reports readings the API rejects as invalid, without holding
+    up the rest of the batch.
+- `XPlantError.requestId` comes from `X-Request-Id`, and `client.rateLimit`
+  from `X-RateLimit-*`. Both are `null` until the API sends those headers.
+- Every method takes a trailing options object with an `AbortSignal` and a
+  `timeout`. The signal also cancels a retry wait.
 - `fetch` config option, for a custom or instrumented `fetch`.
 - Task writes accept `is_all_day`, `genus`, `entity_type`/`entity_id`, and
   `clear_entity_link` on update. `plants.list()` accepts `external_id`.
 - `SensorReadingPayload.external_id`, so a resent batch is not stored twice.
-- `XPlantScope`, `API_KEYS_URL`, `MAX_SENSOR_BATCH`, and types for every new
-  request and response.
+- `XPlantScope`, `API_KEYS_URL`, `DEFAULT_TIMEOUT_MS`, `MAX_PAGE_SIZE`,
+  `MAX_SENSOR_BATCH`, and types for every new request and response.
+- README: "Plans and access" explains that the API is included with xPlant+
+  Teams and Enterprise, that a key unlocks what its plan allows, and that the
+  plan's allowances still apply. It also links to the API guides in
+  `xplant_os/docs`, and warns against calling the API from browser code.
 
 ### Changed
 - `XPlantClientConfig.apiKey` is optional in the type, because `deviceToken`
@@ -69,6 +91,8 @@ existing code are the envelope unwrapping and the new default host.
   constructed directly with a two-argument function keeps working.
 - `client.request()` and `client.requestEnvelope()` take the same optional
   `CallOptions`.
+- A network failure throws `XPlantConnectionError` rather than the raw `fetch`
+  error, which moves to `err.cause`.
 - The vendored `src/testing/v1-surface.json` now records, per endpoint, which
   credentials it accepts and whether it replays an `Idempotency-Key`. The
   contract tests read both, check coverage in both directions, and check

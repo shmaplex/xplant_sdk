@@ -1,4 +1,5 @@
 import type { EnvelopeRequestFn } from "../client.js";
+import { ListPromise } from "../list.js";
 import { toQuery } from "../query.js";
 import type {
   DemandSignalSummary,
@@ -22,21 +23,25 @@ export class TaskDemandResource {
    * @example
    * const [current] = await client.taskDemand.list({ genus: "Alocasia", current: true });
    */
-  async list(
+  list(
     params: TaskDemandListParams = {},
     options?: RequestOptions,
-  ): Promise<DemandSignalSummary[]> {
-    const { data } = await this.request<DemandSignalSummary[]>(
-      `/api/v1/tasks/demand${toQuery({
-        genus: params.genus,
-        current: params.current ? "true" : undefined,
-        limit: params.limit,
-        offset: params.offset,
-      })}`,
-      {},
-      options,
+  ): ListPromise<DemandSignalSummary> {
+    return new ListPromise(
+      (page) =>
+        this.request<DemandSignalSummary[]>(
+          `/api/v1/tasks/demand${toQuery({
+            genus: params.genus,
+            current: params.current ? "true" : undefined,
+            limit: page.limit,
+            offset: page.offset,
+            cursor: page.cursor,
+          })}`,
+          {},
+          options,
+        ),
+      params,
     );
-    return data;
   }
 
   /**

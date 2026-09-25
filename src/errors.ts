@@ -24,6 +24,8 @@ export type XPlantErrorCode =
   | "VALIDATION_ERROR"
   /** 409 — a request with this `Idempotency-Key` is still running. Retry shortly. */
   | "IDEMPOTENCY_IN_FLIGHT"
+  /** 422 — the cursor is malformed, from another endpoint, or reused with other filters. Start from the first page. */
+  | "INVALID_CURSOR"
   /** 409 — the SOP has no version in force, so it cannot be run. */
   | "SOP_RUN_NOT_EFFECTIVE"
   /** 409 — the run is complete and takes no more evidence. */
@@ -58,6 +60,11 @@ export class XPlantError extends Error {
    * `null` when the response carried none.
    */
   readonly retryAfter: number | null;
+  /**
+   * The API's id for this request, from the `X-Request-Id` header. Quote it
+   * when contacting support. `null` when the response carried none.
+   */
+  readonly requestId: string | null;
 
   constructor(
     status: number,
@@ -65,6 +72,7 @@ export class XPlantError extends Error {
     code: XPlantErrorCode | null = null,
     detail?: string,
     retryAfter: number | null = null,
+    requestId: string | null = null,
   ) {
     const suffix = code ? ` (${code})` : "";
     super(`xPlant API error ${status}${suffix}: ${detail ?? body}`);
@@ -73,7 +81,57 @@ export class XPlantError extends Error {
     this.body = body;
     this.code = code;
     this.retryAfter = retryAfter;
+    this.requestId = requestId;
   }
+}
+
+/**
+ * The request never got an answer from the API: DNS, TLS, a dropped
+ * connection, or a gateway that closed the socket. `cause` holds the error
+ * `fetch` raised.
+ */
+export class XPlantConnectionError extends Error {
+  readonly cause: unknown;
+
+  constructor(cause: unknown, message?: string) {
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    super(message ?? `Could not reach the xPlant API: ${reason}`);
+    this.name = "XPlantConnectionError";
+    this.cause = cause;
+  }
+}
+
+/** An attempt took longer than the client's `timeout` and was abandoned. */
+export class XPlantTimeoutError extends XPlantConnectionError {
+  /** The limit that was exceeded, in milliseconds. */
+  readonly timeout: number;
+
+  constructor(timeout: number) {
+    super(null, `xPlant API request timed out after ${timeout} ms`);
+    this.name = "XPlantTimeoutError";
+    this.timeout = timeout;
+  }
+}
+
+/** The per-key request budget, from the `X-RateLimit-*` headers of a response. */
+export interface RateLimitInfo {
+  /** Requests allowed in the current window. */
+  limit: number;
+  /** Requests left in the current window. */
+  remaining: number;
+  /** Seconds until the window resets. */
+  reset: number;
+}
+
+/** Reads `X-RateLimit-*` headers, or `null` when the response carried none. */
+export function parseRateLimit(get: (name: string) => string | null): RateLimitInfo | null {
+  const limit = Number(get("X-RateLimit-Limit"));
+  const remaining = Number(get("X-RateLimit-Remaining"));
+  const reset = Number(get("X-RateLimit-Reset"));
+  if (get("X-RateLimit-Limit") === null || ![limit, remaining, reset].every(Number.isFinite)) {
+    return null;
+  }
+  return { limit, remaining, reset };
 }
 
 /** Pulls `error` and `code` out of a failure body without trusting its shape. */

@@ -1,4 +1,12 @@
-import { XPlantError, parseRetryAfter, readFailure } from "./errors.js";
+import {
+  XPlantConnectionError,
+  XPlantError,
+  XPlantTimeoutError,
+  parseRateLimit,
+  parseRetryAfter,
+  readFailure,
+  type RateLimitInfo,
+} from "./errors.js";
 import {
   networkRetryDelay,
   newIdempotencyKey,
@@ -37,6 +45,9 @@ export const DEFAULT_BASE_URL = "https://app.xplantpro.com";
 export const API_KEYS_URL = "https://app.xplantpro.com/settings/integrations/api-keys";
 
 const DEVICE_TOKEN_PREFIX = "xpd_";
+
+/** How long one attempt may take by default, in milliseconds. */
+export const DEFAULT_TIMEOUT_MS = 60_000;
 
 /**
  * Options for a single request. Resources set `idempotent` on endpoints that
@@ -105,7 +116,13 @@ export interface XPlantClientConfig {
    * pass one, otherwise one generated per call and reused across its attempts.
    */
   retry?: boolean | RetryOptions;
-  /** A `fetch` implementation to use instead of the global one. */
+  /**
+   * Milliseconds each attempt may take, including reading the response, before
+   * it is abandoned with `XPlantTimeoutError`. Defaults to 60 000. `0` waits
+   * indefinitely. A timed-out read is retried when `retry` is on.
+   */
+  timeout?: number;
+  /** A `fetch` implementation to use instead of the global one — e.g. to log or trace requests. */
   fetch?: typeof fetch;
 }
 
@@ -122,6 +139,33 @@ function headerRecord(headers: HeadersInit | undefined): Record<string, string> 
   return { ...(headers as Record<string, string>) };
 }
 
+/**
+ * An abort signal for one attempt: fires when the caller's signal does, or when
+ * `timeoutMs` elapses. Without a timeout, the caller's signal is used as is.
+ */
+function attemptSignal(outer: AbortSignal | undefined, timeoutMs: number) {
+  if (!(timeoutMs > 0 && Number.isFinite(timeoutMs))) {
+    return { signal: outer, timedOut: () => false, done: () => {} };
+  }
+  const controller = new AbortController();
+  let timedOut = false;
+  const forward = () => controller.abort(outer?.reason);
+  if (outer?.aborted) forward();
+  else outer?.addEventListener("abort", forward, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new XPlantTimeoutError(timeoutMs));
+  }, timeoutMs);
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    done: () => {
+      clearTimeout(timer);
+      outer?.removeEventListener("abort", forward);
+    },
+  };
+}
+
 function readHeader(res: Response, name: string): string | null {
   // Tolerates a minimal fetch polyfill whose responses carry no `headers`.
   return typeof res.headers?.get === "function" ? res.headers.get(name) : null;
@@ -132,6 +176,8 @@ export class XPlantClient {
   private readonly credential: string;
   private readonly retry: ResolvedRetry | null;
   private readonly fetchImpl: (input: string, init: RequestInit) => Promise<Response>;
+  private readonly timeout: number;
+  private lastRateLimit: RateLimitInfo | null = null;
 
   constructor(config: XPlantClientConfig) {
     const { apiKey, deviceToken } = config;
@@ -155,6 +201,7 @@ export class XPlantClient {
 
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
     this.retry = resolveRetry(config.retry);
+    this.timeout = config.timeout ?? DEFAULT_TIMEOUT_MS;
     const custom = config.fetch;
     // Resolved per call, and never called as a method of the config object:
     // browsers reject `fetch` invoked with a `this` that is not the window.
@@ -169,7 +216,9 @@ export class XPlantClient {
    *
    * Throws {@link XPlantError} on any non-2xx response, and on a 2xx body that
    * reports a failure — so an error envelope never arrives disguised as data.
-   * A network failure rejects with the error `fetch` raised.
+   * A request that never got an answer throws {@link XPlantConnectionError},
+   * or {@link XPlantTimeoutError} when it ran past `timeout`. Aborting through
+   * `signal` rejects with the signal's reason.
    */
   async requestEnvelope<T>(
     path: string,
@@ -194,25 +243,36 @@ export class XPlantClient {
         ...(idempotencyKey !== undefined ? { "Idempotency-Key": idempotencyKey } : {}),
         ...headerRecord(init.headers),
       },
-      ...(signal ? { signal } : {}),
     };
     const url = `${this.baseUrl}${path}`;
+    const timeoutMs = options.timeout ?? this.timeout;
 
     for (let attempt = 0; ; attempt++) {
+      const guard = attemptSignal(signal, timeoutMs);
       let res: Response;
+      let text: string;
       try {
-        res = await this.fetchImpl(url, request);
+        res = await this.fetchImpl(url, {
+          ...request,
+          ...(guard.signal ? { signal: guard.signal } : {}),
+        });
+        // Inside the timeout: a body that stalls halfway is as stuck as no answer.
+        text = await res.text();
+        guard.done();
       } catch (err) {
-        const delay =
-          this.retry && !signal?.aborted
-            ? networkRetryDelay(this.retry, attempt, resendable)
-            : null;
-        if (delay === null) throw err;
+        guard.done();
+        if (signal?.aborted) throw signal.reason ?? err;
+        const failure = guard.timedOut()
+          ? new XPlantTimeoutError(timeoutMs)
+          : new XPlantConnectionError(err);
+        const delay = this.retry ? networkRetryDelay(this.retry, attempt, resendable) : null;
+        if (delay === null) throw failure;
         await sleep(delay, signal);
         continue;
       }
 
-      const text = await res.text();
+      const rateLimit = parseRateLimit((name) => readHeader(res, name));
+      if (rateLimit) this.lastRateLimit = rateLimit;
 
       if (!res.ok) {
         const { error, code } = readFailure(text);
@@ -222,6 +282,7 @@ export class XPlantClient {
           code ?? null,
           error,
           parseRetryAfter(readHeader(res, "Retry-After")),
+          readHeader(res, "X-Request-Id"),
         );
         const delay = this.retry
           ? responseRetryDelay(this.retry, attempt, failure, resendable)
@@ -260,6 +321,15 @@ export class XPlantClient {
     }
 
     return result;
+  }
+
+  /**
+   * The per-key request budget reported by the most recent response that
+   * carried `X-RateLimit-*` headers, or `null` before any has. Use it to slow a
+   * bulk job down before it meets a `429`.
+   */
+  get rateLimit(): RateLimitInfo | null {
+    return this.lastRateLimit;
   }
 
   /**

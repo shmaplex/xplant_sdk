@@ -1,4 +1,5 @@
 import type { EnvelopeRequestFn } from "../client.js";
+import { ListPromise } from "../list.js";
 import { toQuery } from "../query.js";
 import type { PlantListParams, PlantSummary, RequestOptions } from "../types.js";
 
@@ -12,23 +13,33 @@ export class PlantsResource {
    * Pass `external_id` to resolve your own identifier instead of paging — see
    * {@link findByExternalId} for the single-record convenience.
    *
-   * The API returns no total — a page shorter than `limit` is the last page.
+   * Await it for the first page, or iterate it for every plant — see
+   * {@link ListPromise}.
    *
    * @example
-   * const plants = await client.plants.list({ limit: 50, offset: 0 });
+   * const firstPage = await client.plants.list({ limit: 50 });
+   *
+   * @example
+   * for await (const plant of client.plants.list()) {
+   *   console.log(plant.name);
+   * }
    */
-  async list(params: PlantListParams = {}, options?: RequestOptions): Promise<PlantSummary[]> {
-    const { data } = await this.request<PlantSummary[]>(
-      // The wire parameter is camelCase; the field it resolves is `external_id`.
-      `/api/v1/plants${toQuery({
-        externalId: params.external_id,
-        limit: params.limit,
-        offset: params.offset,
-      })}`,
-      {},
-      options,
+  list(params: PlantListParams = {}, options?: RequestOptions): ListPromise<PlantSummary> {
+    return new ListPromise(
+      (page) =>
+        this.request<PlantSummary[]>(
+          // The wire parameter is camelCase; the field it resolves is `external_id`.
+          `/api/v1/plants${toQuery({
+            externalId: params.external_id,
+            limit: page.limit,
+            offset: page.offset,
+            cursor: page.cursor,
+          })}`,
+          {},
+          options,
+        ),
+      params,
     );
-    return data;
   }
 
   /**
