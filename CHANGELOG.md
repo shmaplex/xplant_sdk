@@ -13,6 +13,23 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-09-26
+
+### Fixed
+- **Transfers carry `custom_fields`**: on `TransferSummary`, and accepted by
+  `transfers.create()`, as on plants and explants. The API has returned them
+  since before 0.6.0, but the SDK's types lacked them. Found by a field-by-field
+  audit of the SDK against the production API spec, which also confirmed every
+  other endpoint, field and enum.
+- Docs: the API models one channel per sensor type per device. Register a
+  second same-type probe as its own device. Readings dedupe on device,
+  `external_id` and moment, so two same-type readings taken at the same moment
+  would otherwise be treated as one.
+- Docs: a stage move either happens completely or not at all.
+  `500 STAGE_ADVANCE_FAILED` means nothing moved, and it's safe to retry with
+  the same `Idempotency-Key`. A stage that couldn't be made current used to be
+  saved with a warning.
+
 ## [0.6.2] — 2026-09-26
 
 ### Added

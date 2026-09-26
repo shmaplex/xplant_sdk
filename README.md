@@ -342,8 +342,8 @@ const { plant, warning } = await client.plants.create({
 await client.plants.update(plant.id, { status: "in_culture" });
 ```
 
-Every plant and explant carries `custom_fields`: the lab's own fields, keyed as
-set up in the lab's settings. Editing a teammate's record needs its creator or
+Every plant, explant and transfer carries `custom_fields`: the lab's own
+fields, keyed as set up in the lab's settings. Editing a teammate's record needs its creator or
 a manager (`403 PLANT_WRITE_FORBIDDEN` / `EXPLANT_WRITE_FORBIDDEN`), and a
 workspace at its plan's record limit answers `402 PLAN_LIMIT_REACHED`.
 
@@ -404,12 +404,15 @@ await client.transfers.create({
   to_location: "Shelf 3",
   notes: "Clean, no browning",
   status: "completed",   // completed (the default) | pending, for a planned transfer
+  custom_fields: { media_batch: "MB-0915" }, // the lab's own fields, as on plants
   // transfer_cycle continues from the last recorded cycle unless you set it
 });
 ```
 
 Every transfer and stage move also appears in `events.list()`, as `transfer`
-and `stage_change` events, so one delta feed covers them.
+and `stage_change` events, so one delta feed covers them. A stage move either
+happens completely or not at all: `500 STAGE_ADVANCE_FAILED` means nothing
+moved, and it's safe to retry with the same `Idempotency-Key`.
 
 ### `client.events` — change history
 
@@ -690,6 +693,12 @@ for await (const r of client.sensorReadings.list({
   console.log(r.recorded_at, r.value, r.unit);
 }
 ```
+
+**One channel per type per device.** A reading names its device and its `type`,
+with no probe or channel field. So a device has one temperature channel, one
+humidity channel and so on. Register each extra probe of the same type, such as
+a second temperature probe, as its own device. Otherwise two readings of the
+same type taken at the same moment are treated as one.
 
 **Batch your posts.** One request per reading spends the rate limit many times
 faster for the same data. Give every reading an `external_id` and a
