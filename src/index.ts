@@ -94,6 +94,8 @@ export type {
   TrainingWarning,
   SopRunDetail,
   SopRunStartInput,
+  SopRunOutcome,
+  SopRunCompleteInput,
   SopStepEvent,
   SopStepEventType,
   SopStepEventInput,

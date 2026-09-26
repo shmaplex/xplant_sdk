@@ -216,8 +216,8 @@ every scope the key holds, so an integration can check before it starts.
 | `write:tasks` | Create and update tasks | `tasks.create`, `tasks.update` |
 | `write:demand` | Push demand numbers per genus | `taskDemand.record` |
 | `read:sops` | Read SOPs and the version in force | `sops.list`, `sops.get` |
-| `read:sop_runs` | Read SOP run history | `sopRuns.get` |
-| `write:sop_runs` | Start SOP runs | `sopRuns.start` |
+| `read:sop_runs` | Read SOP run history | `sopRuns.get`, `sopRuns.listEvents` |
+| `write:sop_runs` | Start and complete SOP runs | `sopRuns.start`, `sopRuns.complete` |
 | `write:sop_steps` | Post evidence against SOP run steps | `sopRuns.recordStepEvent`, `sopRuns.recordMeasurement` |
 | `read:labels` | Resolve QR/barcode codes to records | `labels.resolve` |
 | `write:label_scans` | Record label scans | `labels.recordScan` |
@@ -576,14 +576,34 @@ await client.sopRuns.recordMeasurement(run.id, "step-4", {
   unit: "pH",                  // required — there is no default unit
 });
 
-// GET /api/v1/sop-runs/{id} — read:sop_runs. Step states and evidence, oldest first.
+// GET /api/v1/sop-runs/{id} — read:sop_runs. Step states and the whole evidence
+// trail, oldest first. The API sends the first 50 events; the SDK fetches the rest.
 const detail = await client.sopRuns.get(run.id);
+
+// GET /api/v1/sop-runs/{id}/events — read:sop_runs. The trail a page at a time,
+// for a run too long to hold in memory. A ListPromise, like every list.
+for await (const event of client.sopRuns.listEvents(run.id, { limit: 200 })) {
+  console.log(event.recordedAt, event.stepKey, event.eventType);
+}
+
+// POST /api/v1/sop-runs/{id}/complete — write:sop_runs. Ends the run.
+const closed = await client.sopRuns.complete(run.id, {
+  outcome: "completed",        // completed | failed | cancelled
+  notes: "All jars sealed",    // optional, up to 1000 characters
+});
 ```
 
 If the lab requires training on an SOP, `start()` answers
 `403 TRAINING_REQUIRED` when the key's owner isn't currently trained. If the
 lab only warns — or the owner's training lapses within 30 days — the run starts
 and `run.trainingWarning` says why.
+
+`complete()` closes the run as it closes in xPlant: its `status` becomes the
+outcome, and only `completed` sets `completedAt`. A `failed` run raises the same
+deviation alert as one failed in the app. Only the person who started the run,
+or a manager or above, can close it — the key's owner must be one of them.
+Anyone else gets `404 NOT_FOUND`, the same answer as for an unknown run.
+Closing a run that has already ended answers `409 SOP_RUN_CLOSED`.
 
 Evidence is append-only. A protocol with no version in force answers
 `409 SOP_RUN_NOT_EFFECTIVE`. A run that has ended (completed, failed,
@@ -929,7 +949,8 @@ for await (const page of client.explants.list({ limit: 200 }).pages()) {
 Every list method works this way: `plants`, `explants`, `stages`,
 `transfers`, `events`, `tasks`, `taskDemand`, `sops`, `devices`,
 `devices.listTokens`, `sensorReadings`, `contaminations`, `comments`, `assets`,
-`mediaRecipes`, `equipment`, `equipment.listEvents`, `pricing` and `commerce`.
+`mediaRecipes`, `equipment`, `equipment.listEvents`, `sopRuns.listEvents`,
+`pricing` and `commerce`.
 `limit` sets the page size. It defaults to 50 and is capped at 200, except for
 devices and device tokens (200 by default) and sensor readings (100 by default,
 up to 1000).
@@ -1069,6 +1090,34 @@ With retry on:
 - Nothing else is retried. `maxRetries` (default 2) caps the attempts after the
   first; an `AbortSignal` passed in the options cancels a wait in progress.
 
+**Pacing a bulk job.** `client.rateLimit` is the request budget reported by the
+latest answer:
+
+```typescript
+for (const row of rows) {
+  await client.plants.create(row);
+  const budget = client.rateLimit; // { limit, remaining, reset, observedAt } or null
+  if (budget && budget.remaining < 50) {
+    // `reset` is whole seconds from `observedAt` until the minute's budget refills
+    const waitMs = budget.reset * 1000 - (Date.now() - budget.observedAt);
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+}
+```
+
+- `limit` and `remaining` are for whichever budget has fewer requests left: the
+  key's (or device token's) 1,000, or the workspace's 3,000. The workspace's
+  other keys spend its budget too, so `remaining` can fall faster than your own
+  requests alone would.
+- `reset` is never more than 60.
+- It is updated by every success and every `429`. Other failures leave it as
+  it was.
+- It is `null` before the first answer. It is also `null` after a success that
+  carried no budget, which means the API could not read it. Treat `null` as
+  unknown, not unlimited.
+- The readings budget isn't included. Batch readings with
+  [`sensorReadings.buffer()`](#clientsensorreadings).
+
 **Timeouts.** Each attempt may take 60 seconds, including reading the response,
 before it is abandoned with `XPlantTimeoutError`. Set `timeout` on the client or
 on one call; `0` waits indefinitely. With retry on, a timed-out read is retried
@@ -1100,6 +1149,7 @@ These endpoints honour it:
 | `POST /api/v1/assets` | `assets.create` |
 | `POST /api/v1/media-recipes` | `mediaRecipes.create` |
 | `POST /api/v1/sop-runs` | `sopRuns.start` |
+| `POST /api/v1/sop-runs/{id}/complete` | `sopRuns.complete` |
 | `POST /api/v1/sop-runs/{id}/steps/{stepId}/events` | `sopRuns.recordStepEvent` |
 | `POST /api/v1/sop-runs/{id}/steps/{stepId}/measurements` | `sopRuns.recordMeasurement` |
 | `POST /api/v1/label-scans` | `labels.recordScan` |
@@ -1111,6 +1161,10 @@ Every other endpoint ignores the header. Two dedupe on your own id instead:
 - device events on `external_id`.
 
 A repeat resolves with the record already stored, and nothing new is written.
+
+`sopRuns.complete` matches the key together with the run and the body. The same
+key sent with a different outcome or different notes is not a retry, so it is
+answered on its own: on a run that has already ended, `409 SOP_RUN_CLOSED`.
 
 Pass a key on any write:
 

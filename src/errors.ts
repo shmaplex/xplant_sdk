@@ -32,6 +32,8 @@ export type XPlantErrorCode =
   | "TRAINING_REQUIRED"
   /** 409 — the run has ended (completed, failed, cancelled or archived) and takes no more evidence. */
   | "SOP_RUN_CLOSED"
+  /** 500 — the run could not be ended. Retry with the same `Idempotency-Key`. */
+  | "SOP_RUN_UPDATE_FAILED"
   /** 409 — a device in the batch is paused or retired. */
   | "DEVICE_INGEST_DISABLED"
   /** 402 — the workspace has connected every device its plan includes. */
@@ -135,25 +137,34 @@ export class XPlantTimeoutError extends XPlantConnectionError {
   }
 }
 
-/** The per-key request budget, from the `X-RateLimit-*` headers of a response. */
+/**
+ * The request budget reported by a response's `X-RateLimit-*` headers: the
+ * tighter of the key's and the workspace's per-minute budgets. The sensor
+ * readings budget is not included.
+ */
 export interface RateLimitInfo {
   /** Requests allowed in the current window. */
   limit: number;
   /** Requests left in the current window. */
   remaining: number;
-  /** Seconds until the window resets. */
+  /** Whole seconds, 1–60, until the window resets, as of `observedAt`. */
   reset: number;
+  /** When the response carrying these headers arrived, in epoch milliseconds. */
+  observedAt: number;
 }
 
 /** Reads `X-RateLimit-*` headers, or `null` when the response carried none. */
-export function parseRateLimit(get: (name: string) => string | null): RateLimitInfo | null {
+export function parseRateLimit(
+  get: (name: string) => string | null,
+  now = Date.now(),
+): RateLimitInfo | null {
   const limit = Number(get("X-RateLimit-Limit"));
   const remaining = Number(get("X-RateLimit-Remaining"));
   const reset = Number(get("X-RateLimit-Reset"));
   if (get("X-RateLimit-Limit") === null || ![limit, remaining, reset].every(Number.isFinite)) {
     return null;
   }
-  return { limit, remaining, reset };
+  return { limit, remaining, reset, observedAt: now };
 }
 
 /** Pulls `error` and `code` out of a failure body without trusting its shape. */

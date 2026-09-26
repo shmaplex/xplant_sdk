@@ -147,6 +147,16 @@ const INVOCATIONS: Invocation[] = [
   },
   { name: "sopRuns.get", expect: "GET /api/v1/sop-runs/{id}", call: (c) => c.sopRuns.get("r1") },
   {
+    name: "sopRuns.listEvents",
+    expect: "GET /api/v1/sop-runs/{id}/events",
+    call: (c) => c.sopRuns.listEvents("r1", { limit: 50 }),
+  },
+  {
+    name: "sopRuns.complete",
+    expect: "POST /api/v1/sop-runs/{id}/complete",
+    call: (c, o) => c.sopRuns.complete("r1", { outcome: "completed", notes: "All jars sealed" }, o),
+  },
+  {
     name: "sopRuns.recordStepEvent",
     expect: "POST /api/v1/sop-runs/{id}/steps/{stepId}/events",
     call: (c, o) => c.sopRuns.recordStepEvent("r1", "step-1", { event_type: "confirmed" }, o),
@@ -591,6 +601,50 @@ describe("the SDK sends what the routes read", () => {
       external_id: "shelf-3-alert-0142",
     });
     expect(server.calls[0].body).toMatchObject({ external_id: "shelf-3-alert-0142" });
+  });
+
+  it("returns a run's whole evidence trail from sopRuns.get(), following the events cursor", async () => {
+    const seen: string[] = [];
+    const paged = ((input: string) => {
+      const url = new URL(input);
+      seen.push(`${url.pathname}${url.search}`);
+      if (url.pathname.endsWith("/events")) {
+        const cursor = url.searchParams.get("cursor");
+        const body =
+          cursor === "e50"
+            ? { ok: true, data: [{ id: "ev50" }, { id: "ev51" }], meta: { next_cursor: "e52" } }
+            : { ok: true, data: [{ id: "ev52" }], meta: { next_cursor: null } };
+        return Promise.resolve(new Response(JSON.stringify(body)));
+      }
+      const first = Array.from({ length: 50 }, (_, i) => ({ id: `ev${i}` }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ ok: true, data: { id: "r1", events: first }, meta: { events_next_cursor: "e50" } }),
+        ),
+      );
+    }) as unknown as typeof fetch;
+
+    const run = await client({ fetch: paged }).sopRuns.get("r1");
+
+    expect(run.events).toHaveLength(53);
+    expect(run.events[52]).toEqual({ id: "ev52" });
+    expect(seen).toEqual([
+      "/api/v1/sop-runs/r1",
+      "/api/v1/sop-runs/r1/events?limit=200&cursor=e50",
+      "/api/v1/sop-runs/r1/events?limit=200&cursor=e52",
+    ]);
+  });
+
+  it("makes one request for a run whose trail fits in the first page", async () => {
+    let calls = 0;
+    const single = (() => {
+      calls += 1;
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true, data: { id: "r1", events: [] }, meta: { events_next_cursor: null } })),
+      );
+    }) as unknown as typeof fetch;
+    await client({ fetch: single }).sopRuns.get("r1");
+    expect(calls).toBe(1);
   });
 
   it("hands back sopRuns.start()'s training warning, and null without one", async () => {

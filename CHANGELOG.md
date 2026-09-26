@@ -13,6 +13,45 @@ This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-26
+
+Requires xPlant API 2.152.0 or later, which is live.
+
+### Added
+- **`sopRuns.complete(runId, { outcome, notes })`** ends a run: `completed`,
+  `failed` or `cancelled`. The run closes as it closes in xPlant: its status
+  becomes the outcome, only `completed` sets `completedAt`, and `failed` raises
+  the same deviation alert. Only the run's author or a manager can close it;
+  anyone else gets `404`. Needs `write:sop_runs`.
+  - A run that has already ended answers `409 SOP_RUN_CLOSED`.
+  - A failed write answers `500 SOP_RUN_UPDATE_FAILED`, a new `XPlantErrorCode`.
+    It's safe to retry with the same `Idempotency-Key`, which the SDK sends
+    automatically when `retry` is on.
+  - The key is matched together with the run and the body, so the same key sent
+    with a different outcome or notes is answered on its own.
+- **`sopRuns.listEvents(runId, params)`** pages through a run's evidence trail,
+  oldest first. It returns a `ListPromise`, like every list, and accepts a saved
+  `cursor`. Needs `read:sop_runs`.
+- `SopRunOutcome` and `SopRunCompleteInput` types.
+- `RateLimitInfo.observedAt`: when the budget was read, so `reset` (seconds) can
+  be turned into a wait.
+
+### Changed
+- **`sopRuns.get()` returns the whole evidence trail.** The API now sends the
+  first 50 events with the run, plus `meta.events_next_cursor` for the rest.
+  The SDK follows that cursor, so `run.events` is complete as before. For a
+  very long run, `listEvents()` pages the trail instead.
+- **`client.rateLimit` treats a missing budget as unknown.** It's updated by
+  every success and every `429`.
+  - A success that carries no `X-RateLimit-*` headers resets it to `null`,
+    because the API couldn't read the budget. Previously the last value was
+    kept, which could let a bulk job pace against a stale budget.
+  - Other failures still leave it unchanged.
+  - It reports whichever of the key's and the workspace's per-minute budgets
+    has fewer requests left. The readings budget isn't included.
+- README: the "Pacing a bulk job" example is back, now documenting the API's
+  actual headers.
+
 ## [0.6.3] — 2026-09-26
 
 ### Fixed
