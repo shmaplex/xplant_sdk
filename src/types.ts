@@ -795,6 +795,16 @@ export interface SopRunStartInput {
 
 export type SopStepEventType = "confirmed" | "scanned" | "skipped" | "note" | "device_state";
 
+/** How a run ended. Only `completed` sets `completedAt`. */
+export type SopRunOutcome = "completed" | "failed" | "cancelled";
+
+/** Payload sent to `sopRuns.complete()`. */
+export interface SopRunCompleteInput {
+  outcome: SopRunOutcome;
+  /** Up to 1000 characters, trimmed. Appended to the run's notes, never replacing them. */
+  notes?: string;
+}
+
 /** Payload sent to `sopRuns.recordStepEvent()`. */
 export interface SopStepEventInput {
   event_type: SopStepEventType;

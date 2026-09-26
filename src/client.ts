@@ -277,8 +277,12 @@ export class XPlantClient {
         continue;
       }
 
-      const rateLimit = parseRateLimit((name) => readHeader(res, name));
-      if (rateLimit) this.lastRateLimit = rateLimit;
+      // The API reports the budget on every 2xx and 429. A 2xx or 429 without
+      // the headers means the counter could not be read — unknown, not
+      // unlimited — so the last reading is dropped rather than kept stale.
+      if (res.ok || res.status === 429) {
+        this.lastRateLimit = parseRateLimit((name) => readHeader(res, name));
+      }
 
       if (!res.ok) {
         const { error, code } = readFailure(text);
@@ -330,10 +334,12 @@ export class XPlantClient {
   }
 
   /**
-   * The per-key request budget from the most recent response that carried
-   * `X-RateLimit-*` headers, or `null` when none has. The API does not send
-   * these headers yet, so this is `null` today. Rely on `err.retryAfter` from a
-   * `429` to pace a bulk job.
+   * The request budget reported by the most recent successful or `429`
+   * response: `{ limit, remaining, reset, observedAt }`, where `reset` is whole
+   * seconds from `observedAt`. It is the tighter of the key's and the
+   * workspace's per-minute budgets; the sensor readings budget isn't included.
+   * `null` before any response, and after a response that couldn't report it —
+   * treat that as unknown, not unlimited.
    */
   get rateLimit(): RateLimitInfo | null {
     return this.lastRateLimit;

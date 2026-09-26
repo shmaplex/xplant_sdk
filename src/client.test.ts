@@ -527,21 +527,32 @@ describe("response metadata", () => {
     expect((err as XPlantError).requestId).toBe("req_123");
   });
 
-  it("reports the rate-limit budget of the latest response that carried one", async () => {
-    stubFetch((_url, _init, attempt) => ({
-      ...ok([]),
-      headers: (attempt === 0
-        ? { "X-RateLimit-Limit": "1000", "X-RateLimit-Remaining": "998", "X-RateLimit-Reset": "42" }
-        : {}) as Record<string, string>,
-    }));
+  it("reports the request budget, and treats a 2xx without it as unknown", async () => {
+    const budget = { "X-RateLimit-Limit": "1000", "X-RateLimit-Remaining": "998", "X-RateLimit-Reset": "42" };
+    stubFetch((_url, _init, attempt) => {
+      if (attempt === 0) return { ...ok([]), headers: budget };
+      if (attempt === 1) return { ...fail(404, "NOT_FOUND") }; // no budget on a 404
+      if (attempt === 2) return ok([]); // a 2xx without the headers: the counter failed open
+      return fail(429, "RATE_LIMIT_EXCEEDED", { ...budget, "X-RateLimit-Remaining": "0", "Retry-After": "7" });
+    });
     const client = new XPlantClient({ apiKey: "xpk_live_test" });
     expect(client.rateLimit).toBeNull();
 
     await client.plants.list();
-    expect(client.rateLimit).toEqual({ limit: 1000, remaining: 998, reset: 42 });
+    expect(client.rateLimit).toMatchObject({ limit: 1000, remaining: 998, reset: 42 });
+    expect(client.rateLimit?.observedAt).toBeGreaterThan(0);
 
+    // A 404 carries no budget and says nothing about it: the last reading stands.
+    await client.plants.get("missing").catch(() => {});
+    expect(client.rateLimit).toMatchObject({ remaining: 998 });
+
+    // A 2xx without the headers means the budget couldn't be read — unknown.
     await client.plants.list();
-    expect(client.rateLimit).toEqual({ limit: 1000, remaining: 998, reset: 42 });
+    expect(client.rateLimit).toBeNull();
+
+    // A 429 reports the spent budget.
+    await client.plants.list().catch(() => {});
+    expect(client.rateLimit).toMatchObject({ remaining: 0 });
   });
 });
 

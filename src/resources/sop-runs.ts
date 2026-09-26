@@ -1,8 +1,12 @@
 import type { EnvelopeRequestFn } from "../client.js";
+import { ListPromise } from "../list.js";
+import { toQuery } from "../query.js";
 import type {
   RequestOptions,
   SopMeasurementInput,
+  PageParams,
   SopRun,
+  SopRunCompleteInput,
   SopRunDetail,
   SopRunStarted,
   SopRunStartInput,
@@ -59,19 +63,89 @@ export class SopRunsResource {
   }
 
   /**
-   * Get a run, its step states, and the evidence posted against it, oldest
-   * first.
+   * Get a run, its step states, and all the evidence posted against it,
+   * oldest first.
    * Requires the `read:sop_runs` scope.
+   *
+   * The API returns the first 50 events with the run. When there are more,
+   * this follows the cursor for the rest, so `events` is always the whole
+   * trail. For a very long run, prefer {@link listEvents} to page it yourself.
    *
    * @example
    * const run = await client.sopRuns.get(runId);
    * for (const event of run.events) console.log(event.stepKey, event.eventType);
    */
   async get(runId: string, options?: RequestOptions): Promise<SopRunDetail> {
-    const { data } = await this.request<SopRunDetail>(
+    const { data, meta } = await this.request<SopRunDetail>(
       `/api/v1/sop-runs/${encodeURIComponent(runId)}`,
       {},
       options,
+    );
+    const next = meta?.events_next_cursor;
+    if (typeof next !== "string" || next.length === 0) return data;
+
+    const events = [...(data.events ?? [])];
+    for await (const event of this.listEvents(runId, { cursor: next, limit: 200 }, options)) {
+      events.push(event);
+    }
+    return { ...data, events };
+  }
+
+  /**
+   * Page through the evidence posted against a run, oldest first — 50 per page
+   * by default, up to 200. Await it for the first page, or iterate it for the
+   * whole trail; see {@link ListPromise}.
+   * Requires the `read:sop_runs` scope.
+   *
+   * @example
+   * for await (const event of client.sopRuns.listEvents(runId)) {
+   *   console.log(event.recordedAt, event.stepKey, event.eventType);
+   * }
+   */
+  listEvents(
+    runId: string,
+    params: PageParams = {},
+    options?: RequestOptions,
+  ): ListPromise<SopStepEvent> {
+    return new ListPromise(
+      (page) =>
+        this.request<SopStepEvent[]>(
+          `/api/v1/sop-runs/${encodeURIComponent(runId)}/events${toQuery({
+            limit: page.limit,
+            offset: page.offset,
+            cursor: page.cursor,
+          })}`,
+          {},
+          options,
+        ),
+      params,
+    );
+  }
+
+  /**
+   * End a run: `completed`, `failed` or `cancelled`. Only `completed` sets
+   * `completedAt`. Optional `notes` (up to 1000 characters) are appended to
+   * the run's notes, never replacing them.
+   * Requires the `write:sop_runs` scope, and the run's author or a lab manager
+   * — anyone else gets the same `404` as an unknown run.
+   *
+   * A run that has already ended answers `409 SOP_RUN_CLOSED`; a failed write
+   * `500 SOP_RUN_UPDATE_FAILED`. Safe to retry with an `Idempotency-Key` —
+   * but unlike other writes, a reused key sent with a *different* body is
+   * answered on its own merits rather than replaying the first result.
+   *
+   * @example
+   * await client.sopRuns.complete(runId, { outcome: "completed", notes: "All jars sealed" });
+   */
+  async complete(
+    runId: string,
+    input: SopRunCompleteInput,
+    options?: WriteOptions,
+  ): Promise<SopRun> {
+    const { data } = await this.request<SopRun>(
+      `/api/v1/sop-runs/${encodeURIComponent(runId)}/complete`,
+      { method: "POST", body: JSON.stringify(input) },
+      { ...options, idempotent: true },
     );
     return data;
   }

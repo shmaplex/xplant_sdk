@@ -399,6 +399,24 @@
       "idempotent": false
     },
     {
+      "path": "/api/v1/sop-runs/{id}/complete",
+      "method": "POST",
+      "scopes": [
+        "write:sop_runs"
+      ],
+      "auth": "workspace_key",
+      "idempotent": true
+    },
+    {
+      "path": "/api/v1/sop-runs/{id}/events",
+      "method": "GET",
+      "scopes": [
+        "read:sop_runs"
+      ],
+      "auth": "workspace_key",
+      "idempotent": false
+    },
+    {
       "path": "/api/v1/sop-runs/{id}/steps/{stepId}/events",
       "method": "POST",
       "scopes": [
