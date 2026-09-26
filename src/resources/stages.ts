@@ -52,6 +52,10 @@ export class StagesResource {
    * creator or a manager, or answers `403 STAGE_WRITE_FORBIDDEN`. Each move
    * also appears in `events.list()` as a `stage_change` event.
    *
+   * A move either happens completely or not at all: `500 STAGE_ADVANCE_FAILED`
+   * means nothing moved — the plant or explant is still in its old stage — and
+   * it is safe to retry with the same `Idempotency-Key`.
+   *
    * @example
    * await client.stages.advance({
    *   explant_id: explantId,

@@ -462,6 +462,8 @@ export interface TransferSummary {
   status: TransferStatus | (string & {});
   notes: string | null;
   created_at: string | null;
+  /** The lab's own fields. See {@link CustomFieldValues}. */
+  custom_fields: CustomFieldValues;
 }
 
 /** Whether a transfer has happened (`completed`) or is planned (`pending`). */
@@ -484,6 +486,7 @@ export type TransferCreateInput = EntityTarget & {
   notes?: string;
   /** Defaults to `"completed"`. */
   status?: TransferStatus;
+  custom_fields?: CustomFieldValues;
 };
 
 // ---------------------------------------------------------------------------
@@ -1023,6 +1026,9 @@ export interface SensorReadingPayload {
    * Your own id for this reading, 1–200 characters. A second reading from the
    * same device with the same `external_id` and `recorded_at` is dropped as a
    * duplicate, so a batch retried after a network failure is not stored twice.
+   *
+   * A device has one channel per `type`: register a second probe of the same
+   * type as its own device, or two same-moment readings would be one.
    */
   external_id?: string;
   /**
